@@ -53,12 +53,19 @@ function (dojo, declare) {
                     id: parseInt(tile.tile_id),
                     type: parseInt(tile.type),
                     state: parseInt(tile.state),
-                    owner: tile.player_id
+                    owner: parseInt(tile.player_id)
                 });
             }
 
+            const activePlayerId = parseInt(this.getActivePlayerId());
             for (const tile of this.tiles) {
-                dojo.place(this.format_block("jstpl_tile", tile), "paiko-tiles-reserve");
+                if (tile.owner === activePlayerId) {
+                    const tileNode = dojo.place(this.format_block("jstpl_tile", tile), "paiko-tiles-reserve");
+                    dojo.connect(tileNode, 'onclick', e => {
+                        dojo.stopEvent(e);
+                        this.onTileClick(tile, tileNode);
+                    });
+                }
             }
 
             // Setting up player boards
@@ -137,14 +144,21 @@ function (dojo, declare) {
         // onUpdateActionButtons: in this method you can manage "action buttons" that are displayed in the
         //                        action status bar (ie: the HTML links in the status bar).
         //        
-        onUpdateActionButtons: function( stateName, args )
-        {
-            console.log( 'onUpdateActionButtons: '+stateName );
+        onUpdateActionButtons: function(stateName, args){
+            console.log( `onUpdateActionButtons: ${stateName}`);
                       
-            if( this.isCurrentPlayerActive() )
-            {            
-                switch( stateName )
-                {
+            if (this.isCurrentPlayerActive()) {
+                switch (stateName) {
+                    case "draft":
+                        this.addActionButton('draftButton', _("Draft"), (event) => {
+                            const tiles = Array.from(document.querySelectorAll(".paiko-tile.paiko-selected"));
+                            const ids = tiles.map(tile => tile.dataset.id);
+                            this.ajaxcall( "/paiko/paiko/draft.html", {
+                                tiles: ids.join(",")
+                            }, () => {});
+                            tiles.forEach(tile => tile.classList.remove("paiko-selected"));
+                        });
+                        break
 /*               
                  Example:
  
@@ -266,5 +280,9 @@ function (dojo, declare) {
         },    
         
         */
+
+        onTileClick: function(tile, node) {
+            node.classList.toggle("paiko-selected");
+        }
    });             
 });

@@ -196,7 +196,7 @@ class Paiko extends Table
     function draft(array $tiles): void {
         self::checkAction('draft');
         if (count($tiles) <> self::getTilesToDraft()) {
-            new BgaUserException('Invalid tile count');
+            throw new BgaUserException('Invalid tile count');
         }
         $activePlayer = self::getActivePlayerId();
         $reserve = TileState::RESERVE;

@@ -46,7 +46,7 @@
     {
         self::setAjaxMode();
         $tiles = self::getArg('tiles', AT_numberlist, true);
-        $this->game->draft($tiles);
+        $this->game->draft(explode(',', $tiles));
         self::ajaxResponse();
     }
   }

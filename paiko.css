@@ -54,6 +54,10 @@
         calc(var(--tile-height) * var(--sprite-y) * -1);
 }
 
+.paiko-tile.paiko-selected {
+    box-shadow: 0 0 10px red;
+}
+
 .paiko-tile[data-type="1"], .paiko-tile[data-type="5"] {
     --sprite-x: 1;
 }

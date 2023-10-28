@@ -19,7 +19,7 @@
 
 <script type="text/javascript">
      const jstpl_tile =
-         `<div class="paiko-tile" data-type="\${type}"></div>`;
+         `<div class="paiko-tile" data-id="\${id}" data-type="\${type}"></div>`;
 </script>
 
 {OVERALL_GAME_FOOTER}
