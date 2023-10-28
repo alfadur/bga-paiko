@@ -28,7 +28,7 @@ function (dojo, declare) {
             // Here, you can init the global variables of your user interface
             // Example:
             // this.myGlobalValue = 0;
-
+            this.tiles = [];
         },
         
         /*
@@ -47,7 +47,20 @@ function (dojo, declare) {
         setup: function( gamedatas )
         {
             console.log( "Starting game setup" );
-            
+
+            for (const tile of gamedatas.tiles) {
+                this.tiles.push({
+                    id: parseInt(tile.tile_id),
+                    type: parseInt(tile.type),
+                    state: parseInt(tile.state),
+                    owner: tile.player_id
+                });
+            }
+
+            for (const tile of this.tiles) {
+                dojo.place(this.format_block("jstpl_tile", tile), "paiko-tiles-reserve");
+            }
+
             // Setting up player boards
             for( var player_id in gamedatas.players )
             {

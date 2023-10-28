@@ -71,9 +71,10 @@ class Paiko extends Table
         
         /************ Start the game initialization *****/
 
+        self::createBoard();
         self::createTiles(array_keys($players));
 
-        $this->activeNextPlayer();
+        //$this->activeNextPlayer();
 
         /************ End of the game initialization *****/
     }
@@ -119,6 +120,29 @@ class Paiko extends Table
         return 0;
     }
 
+    static function getBoard(): array {
+        return self::getObjectListFromDb('SELECT x, y FROM board');;
+    }
+
+    static function createBoard(): void {
+        $coords = [];
+        for ($y = 0; $y < 7; ++$y) {
+            for ($x = 6 - $y; $x < 7; ++$x) {
+                $flipX = 13 - $x;
+                $flipY = 13 - $y;
+                if ($x !== 5 || $y !== 5) {
+                    $coords[] = "($x,$y)";
+                    $coords[] = "($flipX,$flipY)";
+                }
+                if ($x !== 6 || $y !== 6) {
+                    $coords[] = "($flipX,$y)";
+                    $coords[] = "($x,$flipY)";
+                }
+            }
+        }
+        $args = implode(',', $coords);
+        self::DbQuery("INSERT INTO board(x, y) VALUES $args");
+    }
 
     static function createTiles(array $playerIds): void {
         $tiles = [];
@@ -135,9 +159,30 @@ class Paiko extends Table
         self::DbQuery($query);
     }
 
+    static function getTilesToDraft(): int {
+        $reserve = TileState::RESERVE;
+        $draftedTiles = (int)self::getUniqueValueFromDb(
+            "SELECT COUNT(*) FROM tiles WHERE state <> $reserve");
+
+        $toDraft = 0;
+        $count = 0;
+        foreach (DRAFT_COUNTS as $draftCount) {
+            $toDraft += $draftCount;
+            if ($draftedTiles < $toDraft) {
+                $count = $draftCount;
+                break;
+            }
+        }
+        return $count;
+    }
+
     function stDraftResolution(): void {
-        self::activeNextPlayer();
-        $this->gamestate->nextState('draft');
+        if (self::getTilesToDraft() === 0) {
+            $this->gamestate->nextState('action');
+        } else {
+            self::activeNextPlayer();
+            $this->gamestate->nextState('draft');
+        }
     }
 
     function stActionResolution(): void {
@@ -145,102 +190,32 @@ class Paiko extends Table
     }
 
     function argDraft(): array {
-        return ['count' => 9];
+        return ['count' => self::getTilesToDraft()];
     }
-//////////////////////////////////////////////////////////////////////////////
-//////////// Utility functions
-////////////    
 
-    /*
-        In this space, you can put any utility methods useful for your game logic
-    */
+    function draft(array $tiles): void {
+        self::checkAction('draft');
+        if (count($tiles) <> self::getTilesToDraft()) {
+            new BgaUserException('Invalid tile count');
+        }
+        $activePlayer = self::getActivePlayerId();
+        $reserve = TileState::RESERVE;
+        $hand = TileState::HAND;
+        $ids = implode(',', $tiles);
+        self::DbQuery(<<<EOF
+            UPDATE tiles
+            SET state = $hand
+            WHERE state = $reserve 
+                AND tile_id IN ($ids)
+                AND player_id = $activePlayer
+            EOF);
 
+        if (self::DbAffectedRow() <> count($tiles)) {
+            throw new BgaUserException('Invalid tiles list');
+        }
 
-
-//////////////////////////////////////////////////////////////////////////////
-//////////// Player actions
-//////////// 
-
-    /*
-        Each time a player is doing some game action, one of the methods below is called.
-        (note: each method below must match an input method in paiko.action.php)
-    */
-
-    /*
-    
-    Example:
-
-    function playCard( $card_id )
-    {
-        // Check that this is the player's turn and that it is a "possible action" at this game state (see states.inc.php)
-        self::checkAction( 'playCard' ); 
-        
-        $player_id = self::getActivePlayerId();
-        
-        // Add your game logic to play a card there 
-        ...
-        
-        // Notify all players about the card played
-        self::notifyAllPlayers( "cardPlayed", clienttranslate( '${player_name} plays ${card_name}' ), array(
-            'player_id' => $player_id,
-            'player_name' => self::getActivePlayerName(),
-            'card_name' => $card_name,
-            'card_id' => $card_id
-        ) );
-          
+        $this->gamestate->nextState('draft');
     }
-    
-    */
-
-    
-//////////////////////////////////////////////////////////////////////////////
-//////////// Game state arguments
-////////////
-
-    /*
-        Here, you can create methods defined as "game state arguments" (see "args" property in states.inc.php).
-        These methods function is to return some additional information that is specific to the current
-        game state.
-    */
-
-    /*
-    
-    Example for game state "MyGameState":
-    
-    function argMyGameState()
-    {
-        // Get some values from the current game situation in database...
-    
-        // return values:
-        return array(
-            'variable1' => $value1,
-            'variable2' => $value2,
-            ...
-        );
-    }    
-    */
-
-//////////////////////////////////////////////////////////////////////////////
-//////////// Game state actions
-////////////
-
-    /*
-        Here, you can create methods defined as "game state actions" (see "action" property in states.inc.php).
-        The action method of state X is called everytime the current game state is set to X.
-    */
-    
-    /*
-    
-    Example for game state "MyGameState":
-
-    function stMyGameState()
-    {
-        // Do some stuff ...
-        
-        // (very often) go to another gamestate
-        $this->gamestate->nextState( 'some_gamestate_transition' );
-    }    
-    */
 
 //////////////////////////////////////////////////////////////////////////////
 //////////// Zombie

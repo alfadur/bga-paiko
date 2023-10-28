@@ -65,7 +65,7 @@ $machinestates = [
         Fsm::DESCRIPTION => '',
         Fsm::TYPE => FsmType::GAME,
         Fsm::ACTION => 'stDraftResolution',
-        Fsm::TRANSITIONS => ['draft' => State::DRAFT, 'game' => State::ACTION]
+        Fsm::TRANSITIONS => ['draft' => State::DRAFT, 'action' => State::ACTION]
     ],
 
     State::DRAFT => [

@@ -24,6 +24,7 @@ class Table {
     static function isCurrentPlayerZombie(): bool { return false; }
     static function activeNextPlayer(): void {}
     static function DbQuery(string $query): void {}
+    static function DbAffectedRow(): int { return 0; }
     static function getCollectionFromDb(string $query): array { return []; }
     static function getObjectListFromDb(string $query): array { return []; }
     static function getUniqueValueFromDb(string $query): ?string { return null; }

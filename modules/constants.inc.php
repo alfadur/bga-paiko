@@ -67,3 +67,5 @@ interface TileState {
     const BOARD = 2;
     const DISCARD = 3;
 }
+
+const DRAFT_COUNTS = [7, 9, 1];

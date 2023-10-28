@@ -42,6 +42,15 @@ class view_paiko_paiko extends game_view
 
         /*********** Place your code below:  ************/
 
+        $squareSize = 70;
+
+        $this->page->begin_block('paiko_paiko', 'boardSquare');
+        foreach ($this->game->getBoard() as $square) {
+            $this->page->insert_block('boardSquare', [
+               'X' => $squareSize * $square['x'],
+               'Y' => $squareSize * $square['y'],
+            ]);
+        }
 
         /*
         
