@@ -1,76 +1,114 @@
 /**
  *------
- * BGA framework: © Gregory Isabelli <gisabelli@boardgamearena.com> & Emmanuel Colin <ecolin@boardgamearena.com>
+ * BGA framework: Gregory Isabelli & Emmanuel Colin & BoardGameArena
  * Paiko implementation : © <Your name here> <Your email address here>
  *
  * This code has been produced on the BGA studio platform for use on http://boardgamearena.com.
  * See http://en.boardgamearena.com/#!doc/Studio for more information.
  * -----
- *
- * paiko.css
- *
- * Paiko stylesheet
- *
  */
 
-#paiko-board {
-    position: relative;
-    width: 980px;
-    height: 980px;
+#pk-container {
+    width: 100%;
+    background-color: rgba(184, 134, 11, 0.55);
+    display: flex;
+    flex-flow: column nowrap;
+    justify-content: center;
+    align-items: center;
+}
+
+#pk-hand {
+    display: flex;
+    flex-flow: row wrap;
+    justify-content: center;
+    align-items: center;
+}
+
+#pk-board {
+    --board-size: 700px;
+
+    display: grid;
+    flex-shrink: 0;
+    width: var(--board-size);
+    height: var(--board-size);
+    grid-template-columns: repeat(7, 1fr) 0.2fr repeat(7, 1fr);
+    grid-template-rows: repeat(7, 1fr) 0.2fr repeat(7, 1fr);
+
     background-image: url("img/board.jpg");
     background-size: cover;
+
+    padding: 6px;
 }
 
-.paiko-board-square {
-    position: absolute;
-    width: 70px;
-    height: 70px;
+.pk-board-space, .pk-board-hole {
+    --column: 0;
+    --row: 0;
+
+    width: 100%;
+    height: 100%;
+
+    grid-column: var(--column);
+    grid-row: var(--row);
+
+    /*background-color: lime;*/
+    /*outline: 2px solid black;*/
 }
 
-.paiko-board-square:hover {
-    background: red;
+.pk-board-space.pk-selectable {
+    background-color: rgba(0, 255, 0, 0.52);
 }
 
-#paiko-tiles-reserve {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
+.pk-board-space:hover, .pk-board-hole:hover {
+    background-color: rgba(224, 224, 65, 0.55);
 }
 
-.paiko-tile {
-    --tile-width: 70px;
-    --tile-height: 70px;
+.pk-board-space.highlight, .pk-board-hole.highlight {
+    animation-name: pk-highlight;
+    animation-duration: 10000ms;
+    animation-timing-function: ease-out;
+}
+
+@keyframes pk-highlight {
+    from {
+        background-color: transparent;
+    }
+    to {
+        background-color: red;
+    }
+}
+
+.pk-piece {
+    --angle: 0;
     --sprite-x: 0;
     --sprite-y: 0;
 
-    width: var(--tile-width);
-    height: var(--tile-height);
+    width: 100%;
+    height: 100%;
     background-image: url("img/tiles.png");
-    background-size:
-        calc(var(--tile-width) * 4)
-        calc(var(--tile-height) * 2);
+    background-size: 400% 200%;
     background-position:
-        calc(var(--tile-width) * var(--sprite-x) * -1)
-        calc(var(--tile-height) * var(--sprite-y) * -1);
+        calc(var(--sprite-x) * 33%)
+        calc(var(--sprite-y) * 100%);
+    transform-origin: center;
+    transform: rotate(calc(var(--angle) * 90deg));
 }
 
-.paiko-tile.paiko-selected {
-    box-shadow: 0 0 10px red;
+.roundedbox .pk-piece, #pk-hand .pk-piece {
+    --piece-size: 50px;
+    display: inline-block;
+    width: var(--piece-size);
+    height: var(--piece-size);
+    vertical-align: middle;
 }
 
-.paiko-tile[data-type="1"], .paiko-tile[data-type="5"] {
-    --sprite-x: 1;
+.roundedbox .pk-piece {
+    pointer-events: none;
 }
 
-.paiko-tile[data-type="2"], .paiko-tile[data-type="6"] {
-    --sprite-x: 2;
+.pk-piece.pk-selected, .pk-piece.pk-selectable:hover {
+    filter: contrast(2);
 }
 
-.paiko-tile[data-type="3"], .paiko-tile[data-type="7"] {
-    --sprite-x: 3;
-}
-
-.paiko-tile[data-type="4"], .paiko-tile[data-type="5"],
-.paiko-tile[data-type="6"], .paiko-tile[data-type="7"] {
-    --sprite-y: 1;
+.pk-piece.pk-selected {
+    outline: 1px solid yellow;
 }

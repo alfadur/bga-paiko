@@ -1,25 +1,21 @@
 
 -- ------
--- BGA framework: © Gregory Isabelli <gisabelli@boardgamearena.com> & Emmanuel Colin <ecolin@boardgamearena.com>
+-- BGA framework: Gregory Isabelli & Emmanuel Colin & BoardGameArena
 -- Paiko implementation : © <Your name here> <Your email address here>
 -- 
 -- This code has been produced on the BGA studio platform for use on http://boardgamearena.com.
 -- See http://en.boardgamearena.com/#!doc/Studio for more information.
 -- -----
 
-CREATE TABLE `tiles`(
-    `tile_id` TINYINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `type` TINYINT UNSIGNED NOT NULL,
-    `state` TINYINT UNSIGNED NOT NULL,
+CREATE TABLE IF NOT EXISTS `piece` (
+    `id` TINYINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `player_id` INTEGER UNSIGNED NOT NULL,
-    PRIMARY KEY (`tile_id`),
+    `type` TINYINT UNSIGNED NOT NULL,
+    `x` TINYINT NULL,
+    `y` TINYINT NULL,
+    `angle` TINYINT NOT NULL DEFAULT  0,
+    `state` TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY (`x`, `y`),
     FOREIGN KEY (`player_id`) REFERENCES `player`(`player_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
-
-CREATE TABLE `board`(
-    `x` TINYINT UNSIGNED NOT NULL,
-    `y` TINYINT UNSIGNED NOT NULL,
-    `tile_id` TINYINT UNSIGNED NULL DEFAULT NULL,
-    PRIMARY KEY(`x`, `y`),
-    FOREIGN KEY(`tile_id`) REFERENCES `tiles`(`tile_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1;

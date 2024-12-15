@@ -1,17 +1,12 @@
 <?php
 /**
  *------
- * BGA framework: © Gregory Isabelli <gisabelli@boardgamearena.com> & Emmanuel Colin <ecolin@boardgamearena.com>
+ * BGA framework: Gregory Isabelli & Emmanuel Colin & BoardGameArena
  * Paiko implementation : © <Your name here> <Your email address here>
  *
  * This code has been produced on the BGA studio platform for use on http://boardgamearena.com.
  * See http://en.boardgamearena.com/#!doc/Studio for more information.
  * -----
- * 
- * states.inc.php
- *
- * Paiko game states description
- *
  */
 
 /*
@@ -37,7 +32,7 @@
    _ action: name of the method to call when this game state become the current game state. Usually, the
              action method is prefixed by "st" (ex: "stMyGameStateName").
    _ possibleactions: array that specify possible player actions on this step. It allows you to use "checkAction"
-                      method on both client side (Javacript: this.checkAction) and server side (PHP: self::checkAction).
+                      method on both client side (Javacript: this.checkAction) and server side (PHP: $this->checkAction).
    _ transitions: the transitions are the possible paths to go from a game state to another. You must name
                   transitions in order to use transition names in "nextState" PHP method, and use IDs to
                   specify the next game state for each transition.
@@ -47,78 +42,63 @@
                             method).
 */
 
-//    !! It is not a good idea to modify this file when a game is running !!
-
- 
 $machinestates = [
-    // The initial state. Please do not modify.
     State::GAME_START => [
-        Fsm::NAME => "gameSetup",
-        Fsm::DESCRIPTION => "",
+        Fsm::NAME => 'gameSetup',
         Fsm::TYPE => FsmType::MANAGER,
-        Fsm::ACTION => 'stGameSetup',
-        Fsm::TRANSITIONS => ['' => State::DRAFT_RESOLUTION]
-    ],
-
-    State::DRAFT_RESOLUTION => [
-        Fsm::NAME => 'draftResolution',
         Fsm::DESCRIPTION => '',
-        Fsm::TYPE => FsmType::GAME,
-        Fsm::ACTION => 'stDraftResolution',
-        Fsm::TRANSITIONS => ['draft' => State::DRAFT, 'action' => State::ACTION]
+        Fsm::ACTION => 'stGameSetup',
+        Fsm::TRANSITIONS => [
+            State::ACTION => State::ACTION
+        ]
     ],
 
-    State::DRAFT => [
-        Fsm::NAME => 'draft',
-        Fsm::DESCRIPTION => clienttranslate('${actplayer} must draft ${count} pieces'),
-        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must draft ${count} pieces'),
-        Fsm::TYPE => FsmType::SINGLE_PLAYER,
-        Fsm::ARGUMENTS => 'argDraft',
-        Fsm::POSSIBLE_ACTIONS => ['draft'],
-        Fsm::TRANSITIONS => ['draft' => State::DRAFT_RESOLUTION],
+    State::NEXT_TURN => [
+        Fsm::NAME => 'nextTurn',
+        Fsm::TYPE => FsmType::GAME,
+        Fsm::DESCRIPTION => '',
+        Fsm::PROGRESSION => true,
+        Fsm::ACTION => 'stNextTurn',
+        Fsm::TRANSITIONS => [
+            State::ACTION => State::ACTION,
+            State::GAME_END => State::GAME_END
+        ]
     ],
 
     State::ACTION => [
-        Fsm::NAME => 'playerTurn',
-        Fsm::DESCRIPTION => clienttranslate('${actplayer} must select an action'),
-        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must select a action'),
+        Fsm::NAME => 'action',
         Fsm::TYPE => FsmType::SINGLE_PLAYER,
-        Fsm::POSSIBLE_ACTIONS => ['deploy', 'draw', 'shift'],
-        Fsm::TRANSITIONS => ['action' => State::CAPTURE_RESOLUTION, 'end' => STATE::GAME_END]
+        Fsm::DESCRIPTION => clienttranslate('${actplayer} must perform an action'),
+        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must perform an action'),
+        Fsm::POSSIBLE_ACTIONS => [
+            'actDeploy',
+            'actMove'
+        ],
+        Fsm::TRANSITIONS => [
+            State::NEXT_TURN => State::NEXT_TURN,
+            State::SAI_MOVE => State::SAI_MOVE
+        ]
     ],
 
-    State::CAPTURE_RESOLUTION => [
-        Fsm::NAME => 'captureResolution',
-        Fsm::DESCRIPTION => '',
-        Fsm::TYPE => FsmType::GAME,
-        Fsm::ACTION => 'stCaptureResolution',
-        Fsm::TRANSITIONS => ['capture' => State::CAPTURE, 'reserve' => State::RESERVE, 'next' => State::ACTION]
-    ],
-
-    State::CAPTURE => [
-        Fsm::NAME => 'capture',
-        Fsm::DESCRIPTION => clienttranslate('${actplayer} must select a tile to capture'),
-        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must select a tile to capture'),
+    State::SAI_MOVE => [
+        Fsm::NAME => 'saiMove',
         Fsm::TYPE => FsmType::SINGLE_PLAYER,
-        Fsm::POSSIBLE_ACTIONS => ['capture'],
-        Fsm::TRANSITIONS => ['capture' => State::CAPTURE_RESOLUTION]
+        Fsm::DESCRIPTION => clienttranslate('${actplayer} must move ${pieceIcon}'),
+        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must move ${pieceIcon}'),
+        Fsm::ARGUMENTS => 'argSaiMove',
+        Fsm::POSSIBLE_ACTIONS => [
+            'actMove',
+            'actSkip'
+        ],
+        Fsm::TRANSITIONS => [
+            State::NEXT_TURN => State::NEXT_TURN
+        ]
     ],
 
-    State::RESERVE => [
-        Fsm::NAME => 'reserve',
-        Fsm::DESCRIPTION => clienttranslate('${actplayer} must choose a tile from your reserve'),
-        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must choose a tile for the opponent'),
-        Fsm::TYPE => FsmType::SINGLE_PLAYER,
-        Fsm::POSSIBLE_ACTIONS => ['selectTile'],
-        Fsm::TRANSITIONS => ['select' => State::DRAFT_RESOLUTION]
-    ],
-
-    // Final state.
-    // Please do not modify (and do not overload action/args methods).
     State::GAME_END => [
         Fsm::NAME => 'gameEnd',
-        Fsm::DESCRIPTION => clienttranslate('End of game'),
-        Fsm::TYPE => FsmType::SINGLE_PLAYER,
+        Fsm::TYPE => FsmType::MANAGER,
+        Fsm::DESCRIPTION => clienttranslate("End of game"),
         Fsm::ACTION => 'stGameEnd',
         Fsm::ARGUMENTS => 'argGameEnd'
     ]
