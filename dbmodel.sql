@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS `piece` (
     `x` TINYINT NULL,
     `y` TINYINT NULL,
     `angle` TINYINT NOT NULL DEFAULT  0,
-    `state` TINYINT NOT NULL DEFAULT 0,
+    `status` TINYINT NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     UNIQUE KEY (`x`, `y`),
     FOREIGN KEY (`player_id`) REFERENCES `player`(`player_id`)

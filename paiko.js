@@ -13,6 +13,7 @@ const gameName = "paiko";
 const State = {
     action: "action",
     saiMove: "saiMove",
+    capture: "capture",
     clientDeploy: "clientDeploy",
     clientMove: "clientMove",
     clientConfirm: "clientConfirm"
@@ -23,6 +24,7 @@ const Action = {
     move: "actMove",
     deploy: "actDeploy",
     skip: "actSkip",
+    capture: "capture",
     clientMove: "actClientMove",
 };
 Object.freeze(Action);
@@ -178,6 +180,17 @@ function prepareMove(piece) {
     return document.querySelectorAll(".pk-board-space:empty")
 }
 
+function getCoordsPieces(bits) {
+    const result = [];
+    while (bits !== 0) {
+        const x = bits & 0xF;
+        const y = bits >>> 4 & 0xF;
+        result.push((findSpace(x, y) || findSpace(x, y)).querySelector(".pk-piece"));
+        bits >>>= 8;
+    }
+    return result;
+}
+
 const Paiko = {
     constructor() {
         console.log(`${gameName} constructor`);
@@ -252,6 +265,14 @@ const Paiko = {
                         },
                         possibleactions: [Action.clientMove, Action.skip]
                     });
+                    break;
+                }
+                case State.capture: {
+                    const captures = state.args.captures || state.args.fireCaptures;
+                    const pieces = getCoordsPieces(captures);
+                    for (const piece of pieces) {
+                        piece.classList.add("pk-selectable");
+                    }
                     break;
                 }
                 case State.clientDeploy: {
@@ -428,7 +449,13 @@ const Paiko = {
     onPieceClick(piece) {
         console.log("clicked", piece);
         if (piece.classList.contains("pk-selectable")) {
-            if (piece.closest(".pk-board-space, .pk-board-hole") === null) {
+            const space = piece.closest(".pk-board-space, .pk-board-hole");
+            if (this.checkAction(Action.capture, true)) {
+                this.bgaPerformAction(Action.capture, {
+                    x: parseInt(space.dataset.x),
+                    y: parseInt(space.dataset.y)
+                })
+            } else if (piece.closest(".pk-board-space, .pk-board-hole") === null) {
                 this.setClientState(State.clientDeploy, {
                     descriptionmyturn: _("${you} must select the space to deploy ${pieceIcon}"),
                     args: {
@@ -458,22 +485,28 @@ const Paiko = {
         }
     },
 
-    async onNotificationDeploy({playerId, type, x, y, angle}) {
+    async onNotificationDeploy({playerId, type, x, y, angle, score}) {
         const piece = parseInt(playerId) === this.player_id ?
             this.gamedatas.gamestate.args.selectedPiece :
             null;
         if (piece) {
             findSpace(x, y).appendChild(piece);
         }
+        if (score !== 0) {
+            this.scoreCtrl[playerId].incValue(score);
+        }
     },
 
-    async onNotificationMove({playerId, from, to, angle}) {
+    async onNotificationMove({playerId, from, to, angle, score}) {
         if (parseInt(playerId) !== this.player_id) {
             const piece = findSpace(from[0], from[1]).firstElementChild;
             const space = findSpace(to[0], to[1]);
             if (piece.parentElement !== space){
                 space.appendChild(piece);
             }
+        }
+        if (score !== 0) {
+            this.scoreCtrl[playerId].incValue(score);
         }
     },
 
@@ -484,6 +517,11 @@ const Paiko = {
             highlights.push(this.animateHighlightSpace(space));
         }
         await Promise.all(highlights);
+    },
+
+    async onNotificationCapture({x, y}) {
+        const piece = (findSpace(x, y) || findHole(x, y)).querySelector(".pk-piece");
+        piece.remove();
     },
 
     formatPiece(playerId, type) {

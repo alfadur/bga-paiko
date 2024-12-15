@@ -76,7 +76,8 @@ $machinestates = [
         ],
         Fsm::TRANSITIONS => [
             State::NEXT_TURN => State::NEXT_TURN,
-            State::SAI_MOVE => State::SAI_MOVE
+            State::SAI_MOVE => State::SAI_MOVE,
+            State::CAPTURE => State::CAPTURE
         ]
     ],
 
@@ -91,6 +92,20 @@ $machinestates = [
             'actSkip'
         ],
         Fsm::TRANSITIONS => [
+            State::NEXT_TURN => State::NEXT_TURN,
+            State::CAPTURE => State::CAPTURE
+        ]
+    ],
+
+    State::CAPTURE => [
+        Fsm::NAME => 'capture',
+        Fsm::TYPE => FsmType::SINGLE_PLAYER,
+        Fsm::DESCRIPTION => clienttranslate('${actplayer} must capture pieces'),
+        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must capture pieces'),
+        Fsm::ARGUMENTS => 'argCapture',
+        Fsm::POSSIBLE_ACTIONS => ['actCapture'],
+        Fsm::TRANSITIONS => [
+            State::CAPTURE => State::CAPTURE,
             State::NEXT_TURN => State::NEXT_TURN
         ]
     ],
