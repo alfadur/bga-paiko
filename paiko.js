@@ -102,14 +102,14 @@ function createPiece(playerIndex, type, angle = 0) {
     const spriteX = type % 4;
     const spriteY = type >> 2;
     return `<div class="pk-piece" style="--angle: ${angle}; --sprite-x: ${spriteX}; --sprite-y: ${spriteY}" 
-        data-type="${type}" data-owner="${playerIndex}">
+        data-type="${type}" data-player="${playerIndex}">
         <div class="pk-piece-shadow"></div>
         <div class="pk-piece-base"></div>
         <div class="pk-piece-image"></div>
     </div>`;
 }
 
-function createBoard() {
+function createBoard(playerIndex) {
     const spaces = [];
     for (let y = 0; y < 14; ++y) {
         const width = y < 7 ? y : 13 - y;
@@ -122,8 +122,12 @@ function createBoard() {
             const className = isHole ?
                 "pk-board-hole" : "pk-board-space";
 
-            const column = x < 7 ? x + 1 : x + 2;
-            const row = y < 7 ? y + 1 : y + 2;
+            let column = x < 7 ? x + 1 : x + 2;
+            let row = y < 7 ? y + 1 : y + 2;
+            if (playerIndex) {
+                column = 16 - column;
+                row = 16 - row;
+            }
             const side =
                 x < 7 && y > 6 ? 1 :
                 x > 6 && y < 7 ? 2 :
@@ -208,21 +212,25 @@ const Paiko = {
         console.log("Starting game setup");
 
         const players = data.players;
-        this.playerIndex = parseInt(players[this.player_id].no);
+        this.playerIndex = this.isSpectator ?
+            0 : parseInt(players[this.player_id].no) - 1;
         const playerIds = Object.keys(players);
 
         const container = createElement(
             document.getElementById('game_play_area'),
-            `<div id="pk-container"></div>`);
+            `<div id="pk-container" data-player="${this.playerIndex}"></div>`);
 
-        const board = createElement(container, createBoard());
-        const hand = createElement(container, createHand());
+        const board = createElement(container, createBoard(this.playerIndex));
+        const hand = createElement(container, createHand(this.playerIndex));
 
         for (const playerId of playerIds) {
+            const player = players[playerId];
+            player.index = parseInt(player.no) - 1;
+
             const pieces = data.pieces.filter(piece => piece.player_id === playerId && piece.x === null);
 
             for (const piece of pieces) {
-                this.addPiece(hand, playerId, parseInt(piece.type));
+                this.addPiece(hand, player.index, parseInt(piece.type), player.index * 2);
             }
         }
 
@@ -232,9 +240,9 @@ const Paiko = {
             });
         }
 
-        for (const {playerId, x, y, type, angle, status} of data.pieces) {
+        for (const {player_id: playerId, x, y, type, angle, status} of data.pieces) {
             if (x !== null) {
-                this.addPiece(findSpace(x, y), playerId, type, angle);
+                this.addPiece(findSpace(x, y), players[playerId].index, type, angle);
             }
         }
 
@@ -315,8 +323,8 @@ const Paiko = {
         }
     },
 
-    addPiece(parent, playerId, type, angle = 0) {
-        const piece = createElement(parent, createPiece(playerId, type, angle));
+    addPiece(parent, playerIndex, type, angle = 0) {
+        const piece = createElement(parent, createPiece(playerIndex, type, angle));
         piece.addEventListener("mousedown", event => {
             event.stopPropagation();
             this.onPieceClick(piece);
@@ -363,6 +371,7 @@ const Paiko = {
                                 y: targetSpace.dataset.y,
                                 type: selectedPiece.dataset.type,
                                 waterRedeploy: true,
+                                angle: getStyle(selectedPiece, {angle: null}).angle
                             })
                         } else {
                             this.bgaPerformAction(Action.move, {
@@ -421,10 +430,12 @@ const Paiko = {
         console.log("clicked", space);
         if (space.classList.contains("pk-selectable")) {
             if (this.checkAction(Action.deploy, true)) {
-                this.bgaPerformAction("actDeploy", {
+                const selectedPiece = this.gamedatas.gamestate.args.selectedPiece;
+                this.bgaPerformAction(Action.deploy, {
                     type: this.gamedatas.gamestate.args.selectedPiece.dataset.type,
                     x: parseInt(space.dataset.x),
-                    y: parseInt(space.dataset.y)
+                    y: parseInt(space.dataset.y),
+                    angle: getStyle(selectedPiece, {angle: null}).angle
                 });
             } else if (this.checkAction(Action.clientMove, true)) {
                 const piece = this.gamedatas.gamestate.args.selectedPiece;
@@ -493,11 +504,13 @@ const Paiko = {
     },
 
     async onNotificationDeploy({playerId, type, x, y, angle, score}) {
+        const playerIndex = this.gamedatas.players[playerId].index;
         const piece = parseInt(playerId) === this.player_id ?
             this.gamedatas.gamestate.args.selectedPiece :
-            null;
+            document.querySelector(`#pk-hand .pk-piece[data-type="${type}"][data-player="${playerIndex}"]`);
         if (piece) {
             findSpace(x, y).appendChild(piece);
+            setStyle(piece, {angle});
         }
         if (score !== 0) {
             this.scoreCtrl[playerId].incValue(score);
@@ -531,8 +544,8 @@ const Paiko = {
         piece.remove();
     },
 
-    formatPiece(playerId, type) {
-        return createPiece(playerId, type);
+    formatPiece(playerIndex, type) {
+        return createPiece(playerIndex, type);
     },
 
     format_string_recursive(log, args) {

@@ -59,6 +59,11 @@
     mask-size: cover;
 }
 
+#pk-container[data-player="1"] #pk-board-background {
+    transform-origin: center;
+    transform: rotate(180deg);
+}
+
 #pk-board-spaces {
     --padding: 7px;
     position: absolute;
@@ -156,7 +161,7 @@
     background-size: 200% 100%;
 }
 
-.pk-piece[data-owner="1"] .pk-piece-base {
+.pk-piece[data-player="1"] .pk-piece-base {
     background-position: 100% 0;
 }
 
@@ -175,7 +180,9 @@
     transition: transform 250ms ease-out;
 }
 
-
+#pk-container[data-player="1"] .pk-piece .pk-piece-image {
+    transform: rotate(calc(var(--angle) * 90deg + 180deg));
+}
 
 .pk-piece.pk-selected {
     outline: 1px solid yellow;
