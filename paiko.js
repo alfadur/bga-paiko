@@ -98,11 +98,14 @@ function getStyle(element, style) {
     return style;
 }
 
-function createPiece(playerId, type, angle = 0) {
+function createPiece(playerIndex, type, angle = 0) {
     const spriteX = type % 4;
     const spriteY = type >> 2;
     return `<div class="pk-piece" style="--angle: ${angle}; --sprite-x: ${spriteX}; --sprite-y: ${spriteY}" 
-        data-type="${type}" data-owner="${playerId}">
+        data-type="${type}" data-owner="${playerIndex}">
+        <div class="pk-piece-shadow"></div>
+        <div class="pk-piece-base"></div>
+        <div class="pk-piece-image"></div>
     </div>`;
 }
 
@@ -132,7 +135,11 @@ function createBoard() {
         }
     }
     return `<div id="pk-board">
-        ${spaces.join("")}
+        <div id="pk-board-shadow-container">
+            <div id="pk-board-shadow"></div>
+        </div>        
+        <div id="pk-board-background"></div>
+        <div id="pk-board-spaces">${spaces.join("")}</div>        
     </div>`;
 }
 

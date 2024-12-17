@@ -10,7 +10,6 @@
 
 #pk-container {
     width: 100%;
-    background-color: rgba(184, 134, 11, 0.55);
     display: flex;
     flex-flow: column nowrap;
     justify-content: center;
@@ -26,18 +25,50 @@
 
 #pk-board {
     --board-size: 700px;
-
-    display: grid;
+    position: relative;
     flex-shrink: 0;
     width: var(--board-size);
     height: var(--board-size);
-    grid-template-columns: repeat(7, 1fr) 0.2fr repeat(7, 1fr);
-    grid-template-rows: repeat(7, 1fr) 0.2fr repeat(7, 1fr);
+    margin-bottom: 2%;
+}
 
+#pk-board-shadow-container {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 4px 4px black);
+}
+
+#pk-board-shadow {
+    width: 100%;
+    height: 100%;
+    background-color: #383838;
+    mask-image: url("img/boardMask.svg");
+    mask-size: cover;
+    translate: 0 0.5%;
+    margin-bottom: -3%;
+}
+
+#pk-board-background {
+    position: absolute;
+    width: 100%;
+    height: 100%;
     background-image: url("img/board.jpg");
     background-size: cover;
+    mask-image: url("img/boardMask.svg");
+    mask-size: cover;
+}
 
-    padding: 6px;
+#pk-board-spaces {
+    --padding: 7px;
+    position: absolute;
+    width: calc(100% - var(--padding) * 2);
+    height: calc(100% - var(--padding) * 2);
+    display: grid;
+    grid-template-columns: repeat(7, 1fr) 0.24fr repeat(7, 1fr);
+    grid-template-rows: repeat(7, 1fr) 0.24fr repeat(7, 1fr);
+    left: var(--padding);
+    top: var(--padding);
 }
 
 .pk-board-space, .pk-board-hole {
@@ -82,15 +113,9 @@
     --sprite-x: 0;
     --sprite-y: 0;
 
+    position: relative;
     width: 100%;
     height: 100%;
-    background-image: url("img/tiles.png");
-    background-size: 400% 200%;
-    background-position:
-        calc(var(--sprite-x) * 33%)
-        calc(var(--sprite-y) * 100%);
-    transform-origin: center;
-    transform: rotate(calc(var(--angle) * 90deg));
 }
 
 .roundedbox .pk-piece, #pk-hand .pk-piece {
@@ -108,6 +133,49 @@
 .pk-piece.pk-selected, .pk-piece.pk-selectable:hover {
     filter: contrast(2);
 }
+
+.pk-piece * {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    pointer-events: none;
+}
+
+.pk-piece-shadow {
+    width: 100%;
+    height: 100%;
+    margin-top: -1%;
+    border-radius: 100%;
+    box-shadow: 0 4px 4px black;
+}
+
+.pk-piece-base {
+    width: 100%;
+    height: 100%;
+    background-image: url("img/disc.svg");
+    background-size: 200% 100%;
+}
+
+.pk-piece[data-owner="1"] .pk-piece-base {
+    background-position: 100% 0;
+}
+
+.pk-piece-image {
+    width: 94%;
+    height: 92%;
+    margin-top: 0;
+    clip-path: circle(45% at center ) ;
+    background-image: url("img/tiles.png");
+    background-size: 400% 200%;
+    background-position:
+        calc(var(--sprite-x) * 100% / 3)
+        calc(var(--sprite-y) * 100%);
+    transform-origin: center;
+    transform: rotate(calc(var(--angle) * 90deg));
+    transition: transform 250ms ease-out;
+}
+
+
 
 .pk-piece.pk-selected {
     outline: 1px solid yellow;
