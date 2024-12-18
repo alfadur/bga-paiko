@@ -25,6 +25,7 @@ enum State {
     final const NEXT_TURN = 2;
     final const ACTION = 3;
     final const CAPTURE = 5;
+    final const RESERVE = 6;
     final const SAI_MOVE = 4;
     final const GAME_END = 99;
 }
@@ -35,13 +36,15 @@ enum GameGlobal: string {
     case FireCaptures = 'fire_captures';
     case LastPiece = 'last_piece';
     case Score = 'score';
+    case LastPlayer = 'capture_player';
 
     final const IDS = [
         self::SaiCoords->value => 10,
         self::Captures->value => 11,
         self::FireCaptures->value => 12,
         self::LastPiece->value => 13,
-        self::Score->value => 14
+        self::Score->value => 14,
+        self::LastPlayer->value => 15,
     ];
 }
 
@@ -61,7 +64,6 @@ enum PieceStatus: int {
     case Reserve = 0;
     case Hand = 1;
     case Board = 2;
-    case Captured = 3;
 }
 
 enum PieceType: int {
@@ -112,6 +114,7 @@ enum PieceType: int {
             [-1, 2], [1, 2]],
         self::Fire->value => [
             [-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2],
+            [0, 0],
             [-1, -1], [0, -1], [1, -1]],
         self::Earth->value => [
             [0, -2],

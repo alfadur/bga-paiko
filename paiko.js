@@ -47,7 +47,7 @@ const PieceThreat = [
     [[0, -2], [0, -3], [0, -4]],
     [],
     [[-1, -2], [1, -2], [-2, -1], [2, -1], [-2, 1], [2, 1], [-1, 2], [1, 2]],
-    [[-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2], [-1, -1], [0, -1], [1, -1]],
+    [[-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2], [-1, -1], [0, -1], [1, -1], [0, 0]],
     [[0, -2], [0, -1], [-2, 0], [-1, 0], [1, 0], [2, 0], [0, 1], [0, 2]],
     [[-1, -1], [1, -1], [-1, 1], [1, 1]]
 ];
@@ -455,7 +455,7 @@ const Paiko = {
             document.getElementById('game_play_area'),
             `<div id="pk-container" data-player="${this.playerIndex}"></div>`);
 
-        const board = createElement(container, createBoard(this.playerIndex));
+        createElement(container, createBoard(this.playerIndex));
         const boardSpaces = document.getElementById("pk-board-spaces");
 
         for (const playerId of playerIds) {
@@ -486,7 +486,7 @@ const Paiko = {
 
         for (const {player_id: playerId, x, y, type, angle, status} of data.pieces) {
             if (x !== null) {
-                this.addPiece(findSpace(x, y), players[playerId].index, type, angle);
+                this.addPiece(findSpace(x, y), players[playerId].index, type, parseInt(angle));
             }
         }
 
@@ -797,6 +797,13 @@ const Paiko = {
     async onNotificationCapture({x, y}) {
         const piece = (findSpace(x, y) || findHole(x, y)).querySelector(".pk-piece");
         piece.remove();
+    },
+
+    async onNotificationReserve({playerIndex, type}) {
+        const hand = findHand(playerIndex, type);
+        if (hand) {
+            this.addPiece(hand, playerIndex, type);
+        }
     },
 
     formatPiece(playerIndex, type) {

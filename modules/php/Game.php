@@ -225,11 +225,9 @@ class Game extends \Table
     private function getThreat(int $x, int $y, array $pieces, bool $covered): array
     {
         $result = $this->getField(\PieceType::THREAT, $x, $y, $pieces);
-        self::dump('c', [$x, $y]);
-        self::dump('thread', $result);
+
         if ($covered) {
             $cover = $this->getCover($x, $y, $pieces);
-            self::dump('cover', $cover);
 
             foreach ($result as $index => &$value) {
                 $value = max(0, $value - $cover[1 - $index]);
@@ -253,7 +251,7 @@ class Game extends \Table
             $threats = $this->getThreat($x, $y, $pieces, true);
 
             if ($threats[1 - $pieceIndex] >= 2) {
-                if ($pieceIndex === $pieceIndex) {
+                if ($pieceIndex === $playerIndex) {
                     throw new \BgaVisibleSystemException('Invalid self capture');
                 }
                 $value = $x | $y << 4;
@@ -306,15 +304,52 @@ class Game extends \Table
         return false;
     }
 
+    private function switchPlayer(): void
+    {
+        $playerId = $this->getActivePlayerId();
+        $playerIndex = $this->getPlayerNoById($playerId) - 1;
+
+        if ($playerIndex === $this->get(\GameGlobal::LastPlayer)) {
+            $this->activeNextPlayer();
+        }
+    }
+
     public function stNextTurn(): void
     {
         if ($this->checkGameEnd()) {
             $this->gamestate->nextState(\State::GAME_END);
         } else {
-            $this->activeNextPlayer();
+            $this->switchPlayer();
             $this->gamestate->nextState(\State::ACTION);
         }
+    }
 
+    public function stCapture(): void
+    {
+        $this->switchPlayer();
+
+        $captures = $this->get(\GameGlobal::Captures);
+        if ($captures === 0) {
+            $captures = $this->get(\GameGlobal::FireCaptures);
+        }
+        if ($captures === 0) {
+            $this->gamestate->nextState(\State::NEXT_TURN);
+        } else {
+            $x = $captures & 0xF;
+            $y = $captures >> 4 & 0xF;
+
+            self::DbQuery(<<<EOF
+                DELETE FROM piece
+                WHERE x = $x AND y = $y
+                EOF);
+
+            $this->notifyAllPlayers('Capture', clienttranslate('${pieceIcon} is captured'), [
+                'x' => $x,
+                'y' => $y,
+                'pieceIcon' => '0,0'
+            ]);
+            $this->gamestate->nextState(\State::RESERVE);
+        }
     }
 
     public function argSaiMove(): array
@@ -392,7 +427,7 @@ class Game extends \Table
 
         self::DbQuery(<<<EOF
             UPDATE piece 
-            SET x = $x, y = $y
+            SET x = $x, y = $y, angle = $angle, status = $board
             WHERE player_id = $playerId AND $handCheck
              AND type = $type
             LIMIT 1
@@ -427,6 +462,8 @@ class Game extends \Table
                 'player_id' => $playerId
             ];
         }
+
+        $this->set(\GameGlobal::LastPlayer, $playerIndex);
 
         if ($piece === \PieceType::Sai) {
             $this->set(\GameGlobal::SaiCoords, $x | $y << 8);
@@ -487,10 +524,7 @@ class Game extends \Table
 
             if ($pieces === null) {
                 $pieces = $this->getNearbyPieces($toX, $toY);
-                if ($piece === PieceType::Fire) {
-                    $pieces = array_filter($pieces, fn($piece) =>
-                        (int)$piece['x'] !== $x || (int)$piece['y'] !== $y);
-                }
+                $pieces = array_filter($pieces, fn($piece) => (int)$piece['x'] !== $x || (int)$piece['y'] !== $y);
             }
             $threats = $this->getThreat($toX, $toY, $pieces, true);
             $cover = $this->getCover($toX, $toY, $pieces);
@@ -531,57 +565,49 @@ class Game extends \Table
             'pieceIcon' => "$playerIndex,$type"
         ]);
 
-        $this->gamestate->nextState(\State::NEXT_TURN);
+        $this->set(\GameGlobal::LastPlayer, $playerIndex);
+
+        $pieces[] = [
+            'x' => $toX,
+            'y' => $toY,
+            'type' => $type,
+            'angle' => $angle,
+            'player_id' => $playerId
+        ];
+
+        if ($this->capture($playerId, $pieces)) {
+            $this->gamestate->nextState(\State::CAPTURE);
+        } else {
+            $this->gamestate->nextState(\State::NEXT_TURN);
+        }
 
         $this->commitGlobals();
     }
 
-    public function actCapture(
-        #[IntParam] int $x,
-        #[IntParam] int $y)
+    public function actReserve(
+        #[IntParam(min: 0, max: 7)] int $type)
     {
         $playerId = $this->getActivePlayerId();
         $playerIndex = $this->getPlayerNoById($playerId) - 1;
 
-        $captures = $this->get(\GameGlobal::Captures);
-        $fireCaptures = $this->get(\GameGlobal::FireCaptures);
-
-        $index = $this->findBitsIndex($captures, $x, $y);
-        $fireIndex = $this->findBitsIndex($fireCaptures, $x, $y);
-
-        if ($captures && $fireIndex !== null
-            || $index === null && $fireIndex === null)
-        {
-            throw new \BgaVisibleSystemException('Invalid capture');
-        }
-
-        [$name, $index, $bits] = $fireIndex === null ?
-            [\GameGlobal::Captures, $index, &$captures] :
-            [\GameGlobal::FireCaptures, $fireIndex, &$fireCaptures];
-
-        $captured = \PieceStatus::Captured->value;
+        $reserve = \PieceStatus::Reserve->value;
+        $hand = \PieceStatus::Hand->value;
         self::DbQuery(<<<EOF
             UPDATE piece
-            SET x = NULL, y = NULL, status = $captured
-            WHERE x = $x AND y = $y
+            SET status = $hand
+            WHERE status = $reserve
+            LIMIT 1
         EOF);
 
-        $bits = ($bits & (1 << $index * 8) - 1)
-            | ($bits & -1 << ($index + 1) * 8) >> 8;
-        $this->set($name, $captures);
-
-        $this->notifyAllPlayers('Capture', clienttranslate('${player_name} captures ${pieceIcon}'), [
+        $opponentIndex = 1 - $playerIndex;
+        $this->notifyAllPlayers('Reserve', clienttranslate('${player_name} selects ${pieceIcon} from reserve'), [
             'player_name' => $this->getPlayerNameById($playerId),
-            'x' => $x,
-            'y' => $y,
-            'pieceIcon' => "$playerIndex,0"
+            'playerIndex' => $opponentIndex,
+            'pieceType' => $type,
+            'pieceIcon' => "$opponentIndex,$type"
         ]);
 
-        if ($captures === 0 && $fireCaptures === 0) {
-            $this->gamestate->nextState(\State::NEXT_TURN);
-        } else {
-            $this->gamestate->nextState(\State::CAPTURE);
-        }
+        $this->gamestate->nextState(\State::CAPTURE);
 
         $this->commitGlobals();
     }

@@ -99,14 +99,25 @@ $machinestates = [
 
     State::CAPTURE => [
         Fsm::NAME => 'capture',
-        Fsm::TYPE => FsmType::SINGLE_PLAYER,
-        Fsm::DESCRIPTION => clienttranslate('${actplayer} must capture pieces'),
-        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must capture pieces'),
-        Fsm::ARGUMENTS => 'argCapture',
-        Fsm::POSSIBLE_ACTIONS => ['actCapture'],
+        Fsm::TYPE => FsmType::GAME,
+        Fsm::ACTION => 'stCapture',
         Fsm::TRANSITIONS => [
             State::CAPTURE => State::CAPTURE,
+            State::RESERVE => State::RESERVE,
             State::NEXT_TURN => State::NEXT_TURN
+        ]
+    ],
+
+    State::RESERVE => [
+        Fsm::NAME => 'reserve',
+        Fsm::TYPE => FsmType::SINGLE_PLAYER,
+        Fsm::DESCRIPTION => clienttranslate('${actplayer} must choose a piece from the opponents reserve'),
+        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must choose a piece from the opponents reserve'),
+        Fsm::POSSIBLE_ACTIONS => [
+            'actReserve'
+        ],
+        Fsm::TRANSITIONS => [
+            State::CAPTURE => State::CAPTURE
         ]
     ],
 
