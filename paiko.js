@@ -41,6 +41,22 @@ const PieceType = {
 }
 Object.freeze(PieceType);
 
+const PieceThreat = [
+    [[0, -1]],
+    [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]],
+    [[0, -2], [0, -3], [0, -4]],
+    [],
+    [[-1, -2], [1, -2], [-2, -1], [2, -1], [-2, 1], [2, 1], [-1, 2], [1, 2]],
+    [[-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2], [-1, -1], [0, -1], [1, -1]],
+    [[0, -2], [0, -1], [-2, 0], [-1, 0], [1, 0], [2, 0], [0, 1], [0, 2]],
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]]
+];
+Object.freeze(PieceThreat);
+
+const Directions = [[0, -1], [1, 0], [0, 1], [-1, 0]]
+    .map(([x, y]) => ({x, y}));
+Object.freeze(Directions);
+
 function intMod(a, b) {
     return (a % b + b) % b;
 }
@@ -192,6 +208,69 @@ function getPath(fromX, fromY, toX, toY, orthogonal = false) {
     return path;
 }
 
+function getThreat(spaceX, spaceY) {
+    const pieces = [];
+    for (let y = spaceY - 4; y <= spaceY + 4; ++y) {
+        for (let x = spaceX - 4; x <= spaceX + 4; ++x) {
+            const piece = document.querySelector(`#pk-board-space-${x}-${y} .pk-piece`);
+            if (piece) {
+                pieces.push(piece);
+            }
+        }
+    }
+
+    const threat = [0, 0];
+
+    for (const piece of pieces) {
+        const playerIndex = parseInt(piece.dataset.player);
+        const type = parseInt(piece.dataset.type);
+        const pieceX = parseInt(piece.parentElement.dataset.x);
+        const pieceY = parseInt(piece.parentElement.dataset.y);
+        const angle = getStyle(piece, {angle: null}).angle;
+        const direction = Directions[intMod(angle, 4)];
+
+        for (const [x, y] of  PieceThreat[type]) {
+            const {dx, dy} = {
+                dx: -direction.x * y - direction.y * x,
+                dy: direction.x * x - direction.y * y,
+            }
+
+            if (pieceX + dx === spaceX && pieceY + dy === spaceY) {
+                if (type === PieceType.fire) {
+                    ++threat[1 - playerIndex];
+                }
+                ++threat[playerIndex];
+            }
+        }
+    }
+
+    return threat;
+}
+
+function prepareDeploy(playerIndex, piece) {
+    const query = piece === PieceType.lotus ?
+        ".pk-board-space:empty, .pk-board-hole:empty" :
+        ".pk-board-space:empty"
+    const spaces = Array.from(document.querySelectorAll(query));
+    const result = [];
+
+    for (const space of spaces) {
+        const spaceX = parseInt(space.dataset.x);
+        const spaceY = parseInt(space.dataset.y);
+        const threat = getThreat(spaceX, spaceY);
+        const isBase = playerIndex ? spaceX > 6 && spaceY < 7 : spaceX < 7 && spaceY > 6;
+
+        const isValid = piece === PieceType.lotus ?
+            threat[1 - playerIndex] <= 2 :
+            threat[1 - playerIndex] === 0
+            && (isBase || threat[playerIndex] > 0);
+        if (isValid) {
+            result.push(space);
+        }
+    }
+    return result;
+}
+
 function prepareMove(piece) {
     return document.querySelectorAll(".pk-board-space:empty")
 }
@@ -305,10 +384,8 @@ const Paiko = {
                     break;
                 }
                 case State.clientDeploy: {
-                    const query = parseInt(state.args.selectedPiece.dataset.type) === PieceType.lotus ?
-                        ".pk-board-space:empty, .pk-board-hole:empty" :
-                        ".pk-board-space:empty"
-                    const spaces = document.querySelectorAll(query);
+                    const type = parseInt(state.args.selectedPiece.dataset.type);
+                    const spaces = prepareDeploy(this.playerIndex, type);
                     for (const space of spaces) {
                         space.classList.add("pk-selectable");
                     }
@@ -355,7 +432,7 @@ const Paiko = {
                 }
                 case State.clientDeploy:
                 case State.clientMove: {
-                    clearTag("pk-selectable", " .pk-board-space");
+                    clearTag("pk-selectable", " .pk-board-space,  .pk-board-hole");
                     clearTag("pk-selected");
                     break
                 }

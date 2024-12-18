@@ -122,16 +122,17 @@
     grid-column: var(--column);
     grid-row: var(--row);
 
-    /*background-color: lime;*/
-    /*outline: 2px solid black;*/
+    transition: background-color 180ms ease-in;
 }
 
-.pk-board-space.pk-selectable {
+.pk-board-space.pk-selectable,
+.pk-board-hole.pk-selectable {
     background-color: rgba(0, 255, 0, 0.52);
 }
 
-.pk-board-space:hover, .pk-board-hole:hover {
-    background-color: rgba(224, 224, 65, 0.55);
+.pk-board-space.pk-selectable:hover, .pk-board-hole.pk-selectable:hover {
+    background-color: rgba(224, 224, 65, 0.8);
+    transition: background-color 0ms;
 }
 
 .pk-board-space.highlight, .pk-board-hole.highlight {
