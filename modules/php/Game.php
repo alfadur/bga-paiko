@@ -314,6 +314,23 @@ class Game extends \Table
         }
     }
 
+    public function stDraftDispatch(): void
+    {
+        $hand = \PieceStatus::Hand->value;
+
+        $drafted = (int)self::getUniqueValueFromDB(<<<EOF
+            SELECT COUNT(*) AS count 
+            FROM piece  
+            WHERE status = $hand
+            EOF);
+        if ($drafted < 17) {
+            $this->activeNextPlayer();
+            $this->gamestate->nextState(\State::DRAFT);
+        } else {
+            $this->gamestate->nextState(\State::ACTION);
+        }
+    }
+
     public function stNextTurn(): void
     {
         if ($this->checkGameEnd()) {
@@ -352,6 +369,30 @@ class Game extends \Table
         }
     }
 
+    private function getDraftCount(): int
+    {
+        $hand = \PieceStatus::Hand->value;
+        $drafted = (int)self::getUniqueValueFromDB(<<<EOF
+            SELECT COUNT(*) AS count 
+            FROM piece  
+            WHERE status = $hand
+            EOF);
+
+        return match ($drafted) {
+            0 => 7,
+            7 => 9,
+            16 => 1,
+            default => 0
+        };
+    }
+
+    public function argDraft(): array
+    {
+        return [
+            'count' => $this->getDraftCount()
+        ];
+    }
+
     public function argSaiMove(): array
     {
         $playerId = $this->getActivePlayerId();
@@ -371,6 +412,39 @@ class Game extends \Table
             'captures' => $this->get(\GameGlobal::Captures),
             'fireCaptures' => $this->get(\GameGlobal::FireCaptures)
         ];
+    }
+
+    public function actDraft(
+        #[IntArrayParam] array $ids): void
+    {
+        if (count($ids) !== $this->getDraftCount()) {
+            throw new \BgaVisibleSystemException('Invalid draft count');
+        }
+        $hand = \PieceStatus::Hand->value;
+        $reserve = \PieceStatus::Reserve->value;
+        $ids_str = implode(',', $ids);
+        $playerId = $this->getActivePlayerId();
+        self::DbQuery(<<<EOF
+            UPDATE piece 
+            SET status = $hand
+            WHERE id IN ($ids_str) 
+              AND status = $reserve
+              AND player_id = $playerId
+        EOF);
+        if (self::DbAffectedRow() !== count($ids)) {
+            throw new \BgaVisibleSystemException('Invalid draft tiles');
+        }
+
+        $playerIndex = $this->getPlayerNoById($playerId) - 1;
+
+        $this->notifyAllPlayers('Draft', clienttranslate('${player_name} drafts ${piecesIcon}'), [
+            'player_name' => $this->getPlayerNameById($playerId),
+            'playerIndex' => $playerIndex,
+            'pieceIds' => $ids,
+            'piecesIcon' => "$playerIndex,id,$ids_str"
+        ]);
+
+        $this->gamestate->nextState(\State::DRAFT_DISPATCH);
     }
 
     public function actDeploy(
@@ -600,7 +674,7 @@ class Game extends \Table
         EOF);
 
         $opponentIndex = 1 - $playerIndex;
-        $this->notifyAllPlayers('Reserve', clienttranslate('${player_name} selects ${pieceIcon} from reserve'), [
+        $this->notifyAllPlayers('Draft', clienttranslate('${player_name} selects ${pieceIcon} from reserve'), [
             'player_name' => $this->getPlayerNameById($playerId),
             'playerIndex' => $opponentIndex,
             'pieceType' => $type,

@@ -27,6 +27,8 @@ enum State {
     final const CAPTURE = 5;
     final const RESERVE = 6;
     final const SAI_MOVE = 4;
+    final const DRAFT_DISPATCH = 7;
+    final const DRAFT = 8;
     final const GAME_END = 99;
 }
 

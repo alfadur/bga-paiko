@@ -49,6 +49,29 @@ $machinestates = [
         Fsm::DESCRIPTION => '',
         Fsm::ACTION => 'stGameSetup',
         Fsm::TRANSITIONS => [
+            State::DRAFT => State::DRAFT
+        ]
+    ],
+
+    State::DRAFT => [
+        Fsm::NAME => 'draft',
+        Fsm::TYPE => FsmType::SINGLE_PLAYER,
+        Fsm::DESCRIPTION => clienttranslate('${actplayer} must draft tiles from reserve'),
+        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must draft ${count} tile(s) from reserve'),
+        Fsm::ARGUMENTS => 'argDraft',
+        Fsm::POSSIBLE_ACTIONS => ['actDraft'],
+        Fsm::TRANSITIONS => [
+            State::DRAFT_DISPATCH => State::DRAFT_DISPATCH
+        ]
+    ],
+
+    State::DRAFT_DISPATCH => [
+        Fsm::NAME => 'draftDispatch',
+        Fsm::TYPE => FsmType::GAME,
+        Fsm::DESCRIPTION => '',
+        Fsm::ACTION => 'stDraftDispatch',
+        Fsm::TRANSITIONS => [
+            State::DRAFT => State::DRAFT,
             State::ACTION => State::ACTION
         ]
     ],

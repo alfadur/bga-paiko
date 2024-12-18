@@ -11,6 +11,7 @@
 const gameName = "paiko";
 
 const State = {
+    draft: "draft",
     action: "action",
     saiMove: "saiMove",
     capture: "capture",
@@ -21,6 +22,7 @@ const State = {
 Object.freeze(State);
 
 const Action = {
+    draft: "actDraft",
     move: "actMove",
     deploy: "actDeploy",
     skip: "actSkip",
@@ -143,11 +145,13 @@ function getStyle(element, style) {
     return style;
 }
 
-function createPiece(playerIndex, type, angle = 0) {
+function createPiece(id, playerIndex, type, angle = 0) {
     const spriteX = type % 4;
     const spriteY = type >> 2;
-    return `<div class="pk-piece" style="--angle: ${angle}; --sprite-x: ${spriteX}; --sprite-y: ${spriteY}" 
-        data-type="${type}" data-player="${playerIndex}">
+    const idString = id === null ? "" : `id="pk-piece-${id}"`;
+    const data = id === null ? "" : `data-id="${id}"`;
+    return `<div ${idString} class="pk-piece" style="--angle: ${angle}; --sprite-x: ${spriteX}; --sprite-y: ${spriteY}" 
+        data-type="${type}" data-player="${playerIndex}" ${data}>
         <div class="pk-piece-shadow"></div>
         <div class="pk-piece-base"></div>
         <div class="pk-piece-image"></div>
@@ -501,7 +505,7 @@ const Paiko = {
                     parseInt(piece.status) === PieceStatus.hand ?
                         findHand(player.index, piece.type) :
                         findReserve(player.index, piece.type);
-                this.addPiece(parent, player.index, parseInt(piece.type), player.index * 2);
+                this.addPiece(piece.id, parent, player.index, parseInt(piece.type), player.index * 2);
             }
         }
 
@@ -513,7 +517,7 @@ const Paiko = {
 
         for (const {player_id: playerId, x, y, type, angle, status} of data.pieces) {
             if (x !== null) {
-                this.addPiece(findSpace(x, y), players[playerId].index, type, parseInt(angle));
+                this.addPiece(piece.id, findSpace(x, y), players[playerId].index, type, parseInt(angle));
             }
         }
 
@@ -530,6 +534,13 @@ const Paiko = {
 
         if (this.isCurrentPlayerActive()) {
             switch (stateName) {
+                case State.draft: {
+                    const pieces = document.querySelectorAll(`.pk-reserve .pk-piece[data-player="${this.playerIndex}"]`);
+                    for (const piece of pieces) {
+                        piece.classList.add("pk-selectable");
+                    }
+                    break;
+                }
                 case State.action: {
                     const pieces = document.querySelectorAll(`.pk-hand[data-player="${this.playerIndex}"] .pk-piece, .pk-board-space .pk-piece[data-player="${this.playerIndex}"]`);
                     for (const piece of pieces) {
@@ -608,8 +619,8 @@ const Paiko = {
         }
     },
 
-    addPiece(parent, playerIndex, type, angle = 0) {
-        const piece = createElement(parent, createPiece(playerIndex, type, angle));
+    addPiece(id, parent, playerIndex, type, angle = 0) {
+        const piece = createElement(parent, createPiece(id, playerIndex, type, angle));
         piece.addEventListener("mousedown", event => {
             event.stopPropagation();
             this.onPieceClick(piece);
@@ -639,8 +650,18 @@ const Paiko = {
 
         if (this.isCurrentPlayerActive()) {
             switch (stateName) {
+                case State.draft: {
+                    this.addActionButton("pk-confirm-button", _("Confirm"), () => {
+                        const ids = Array.from(document.querySelectorAll(".pk-hand .pk-piece.pk-selectable"))
+                            .map(piece => piece.dataset.id)
+                            .join(",");
+                        this.bgaPerformAction(Action.draft, { ids });
+                    });
+                    document.getElementById("pk-confirm-button").classList.add("disabled");
+                    break;
+                }
                 case State.clientConfirm: {
-                    this.addActionButton("confirm-button", _("Confirm"), () => {
+                    this.addActionButton("pk-confirm-button", _("Confirm"), () => {
                         const {selectedPiece, sourceSpace, targetSpace} = args;
                         const type = parseInt(selectedPiece.dataset.type);
                         const x = parseInt(targetSpace.dataset.x);
@@ -749,8 +770,32 @@ const Paiko = {
     onPieceClick(piece) {
         console.log("clicked", piece);
         if (piece.classList.contains("pk-selectable")) {
+            const state = this.gamedatas.gamestate;
             const space = piece.closest(".pk-board-space, .pk-board-hole");
-            if (this.checkAction(Action.capture, true)) {
+            const type = parseInt(piece.dataset.type);
+
+            if (this.checkAction(Action.draft, true)) {
+                const hand = findHand(this.playerIndex, type);
+                const count = state.args.count;
+                let drafted = document.querySelectorAll(".pk-hand .pk-piece.pk-selectable").length;
+                if (piece.parentElement !== hand) {
+                    if (drafted < count) {
+                        ++drafted;
+                        hand.appendChild(piece);
+                        this.statusBar.setTitle(
+                            _("${you} must draft ${count} tile(s) from reserve"),
+                            {count: count - drafted});
+                    }
+                } else {
+                    --drafted;
+                    findReserve(this.playerIndex, type).appendChild(piece);
+                    this.statusBar.setTitle(
+                        _("${you} must draft ${count} tile(s) from reserve"),
+                        {count: count - drafted});
+                }
+                console.log(drafted, count);
+                document.getElementById("pk-confirm-button").classList.toggle("disabled", drafted !== count);
+            } else if (this.checkAction(Action.capture, true)) {
                 this.bgaPerformAction(Action.capture, {
                     x: parseInt(space.dataset.x),
                     y: parseInt(space.dataset.y)
@@ -770,7 +815,7 @@ const Paiko = {
                     const {angle} = getStyle(piece, {angle: null});
                     setStyle(piece, {angle: angle + 1});
                 }
-            } else {
+            } else if (state.name === State.action) {
                 clearTag("pk-selected");
                 this.setClientState(State.clientMove, {
                     descriptionmyturn: "${you} must move ${pieceIcon}",
@@ -826,22 +871,37 @@ const Paiko = {
         piece.remove();
     },
 
-    async onNotificationReserve({playerIndex, type}) {
-        const hand = findHand(playerIndex, type);
-        if (hand) {
-            this.addPiece(hand, playerIndex, type);
+    async onNotificationDraft({playerIndex, pieceIds}) {
+        for (const id of pieceIds) {
+            const piece = document.getElementById(`pk-piece-${id}`);
+            console.log(piece);
+            const hand = findHand(playerIndex, piece.dataset.type);
+            console.log(hand);
+            hand.appendChild(piece);
         }
     },
 
     formatPiece(playerIndex, type) {
-        return createPiece(playerIndex, type);
+        return createPiece(null, playerIndex, type);
+    },
+
+    formatPieces(playerIndex, property, ...values) {
+        const result = [];
+        for (const value of values) {
+            if (property === "id") {
+                const piece = document.getElementById(`pk-piece-${value}`);
+                result.push(createPiece(null, playerIndex, piece.dataset.type));
+            }
+        }
+        return result.join("");
     },
 
     format_string_recursive(log, args) {
         if (args && !("substitutionComplete" in args)) {
             args.substitutionComplete = true;
             const formatters = {
-                'piece': this.formatPiece
+                'piece': this.formatPiece,
+                'pieces': this.formatPieces
             };
             for (const iconType of Object.keys(formatters)) {
                 const icons = Object.keys(args).filter(name => name.startsWith(`${iconType}Icon`));
