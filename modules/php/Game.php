@@ -74,7 +74,7 @@ class Game extends \Table
     private function generatePieces(array $players): void
     {
         $pieces = [];
-        $hand = \PieceStatus::Hand->value;
+        $hand = \PieceStatus::Reserve->value;
         foreach ($players as $playerId => $player) {
             foreach (\PieceType::cases() as $type) {
                 foreach (range(0, 2) as $_) {

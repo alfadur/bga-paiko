@@ -41,6 +41,13 @@ const PieceType = {
 }
 Object.freeze(PieceType);
 
+const PieceStatus = {
+    reserve: 0,
+    hand: 1,
+    board: 2
+}
+Object.freeze(PieceStatus);
+
 const PieceThreat = [
     [[0, -1]],
     [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]],
@@ -185,11 +192,21 @@ function createBoard(playerIndex) {
     </div>`;
 }
 
-function createHand(playerIndex, type, invert) {
+function createStack(className, playerIndex, type, invert) {
     invert = invert ? "invert" : "";
-    return `<div id="pk-hand-${playerIndex}-${type}" class="pk-hand ${invert}" data-player="${playerIndex}" data-type="${type}">
+    return `<div id="${className}-${playerIndex}-${type}" class="${className} ${invert}" data-player="${playerIndex}" data-type="${type}">
     </div>`;
 }
+
+
+function createHand(playerIndex, type, invert) {
+    return createStack("pk-hand", playerIndex, type, invert);
+}
+
+function createReserve(playerIndex, type, invert) {
+    return createStack("pk-reserve", playerIndex, type, invert);
+}
+
 
 function findSpace(x, y) {
     return document.getElementById(`pk-board-space-${x}-${y}`);
@@ -201,6 +218,10 @@ function findHole(x, y) {
 
 function findHand(playerIndex, type) {
     return document.getElementById(`pk-hand-${playerIndex}-${type}`)
+}
+
+function findReserve(playerIndex, type) {
+    return document.getElementById(`pk-reserve-${playerIndex}-${type}`)
 }
 
 function getPath(fromX, fromY, toX, toY, orthogonal = false) {
@@ -466,15 +487,21 @@ const Paiko = {
             if ((player.index !== this.playerIndex)) {
                 types.reverse();
             }
+
             for (const type of types) {
                 createElement(boardSpaces, createHand(player.index, PieceType[type], this.playerIndex === 1));
+
+                createElement(boardSpaces, createReserve(player.index, PieceType[type], this.playerIndex === 1));
             }
 
-            const pieces = data.pieces.filter(piece => piece.player_id === playerId && piece.x === null);
+            const pieces = data.pieces.filter(piece => piece.player_id === playerId && parseInt(piece.status) !== PieceStatus.board);
 
             for (const piece of pieces) {
-                const hand = findHand(player.index, piece.type);
-                this.addPiece(hand, player.index, parseInt(piece.type), player.index * 2);
+                const parent =
+                    parseInt(piece.status) === PieceStatus.hand ?
+                        findHand(player.index, piece.type) :
+                        findReserve(player.index, piece.type);
+                this.addPiece(parent, player.index, parseInt(piece.type), player.index * 2);
             }
         }
 

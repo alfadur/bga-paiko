@@ -16,7 +16,7 @@
     align-items: center;
 }
 
-.pk-hand {
+.pk-hand, .pk-reserve {
     --row: 0;
     --column: 0;
 
@@ -29,33 +29,51 @@
     grid-column: var(--column);
 }
 
+.pk-reserve {
+    grid-column: calc(16 - var(--column));
+    transition:
+        opacity 180ms ease-in,
+        filter 180ms ease-in;
+}
+
+.pk-reserve:not(:has(.pk-piece.pk-selectable)) {
+    opacity: 0.7;
+    filter: grayscale(0.4);
+}
+
 .pk-hand:not(.invert)[data-player="1"],
 .pk-hand.invert[data-player="0"] {
     grid-row: calc(16 - var(--row));
     grid-column: calc(16 - var(--column));
 }
 
-.pk-hand[data-type="0"] { --row: 13; --column: 1; }
-.pk-hand[data-type="1"] { --row: 13; --column: 2; }
-.pk-hand[data-type="2"] { --row: 14; --column: 1; }
-.pk-hand[data-type="3"] { --row: 14; --column: 2; }
-.pk-hand[data-type="4"] { --row: 14; --column: 3; }
-.pk-hand[data-type="5"] { --row: 15; --column: 1; }
-.pk-hand[data-type="6"] { --row: 15; --column: 2; }
-.pk-hand[data-type="7"] { --row: 15; --column: 3; }
+.pk-reserve:not(.invert)[data-player="1"],
+.pk-reserve.invert[data-player="0"] {
+    grid-row: calc(16 - var(--row));
+    grid-column: var(--column);
+}
 
-.pk-hand .pk-piece {
+.pk-hand[data-type="0"], .pk-reserve[data-type="0"] { --row: 13; --column: 1; }
+.pk-hand[data-type="1"], .pk-reserve[data-type="1"] { --row: 13; --column: 2; }
+.pk-hand[data-type="2"], .pk-reserve[data-type="2"] { --row: 14; --column: 1; }
+.pk-hand[data-type="3"], .pk-reserve[data-type="3"] { --row: 14; --column: 2; }
+.pk-hand[data-type="4"], .pk-reserve[data-type="4"] { --row: 14; --column: 3; }
+.pk-hand[data-type="5"], .pk-reserve[data-type="5"] { --row: 15; --column: 1; }
+.pk-hand[data-type="6"], .pk-reserve[data-type="6"] { --row: 15; --column: 2; }
+.pk-hand[data-type="7"], .pk-reserve[data-type="7"] { --row: 15; --column: 3; }
+
+.pk-hand .pk-piece, .pk-reserve .pk-piece {
     width: 100%;
     height: 100%;
     flex-shrink: 0;
     pointer-events: none;
 }
 
-.pk-hand .pk-piece:last-child {
+.pk-hand .pk-piece:last-child, .pk-reserve .pk-piece:last-child {
     pointer-events: all;
 }
 
-.pk-hand .pk-piece:not(:first-child) {
+.pk-hand .pk-piece:not(:first-child), .pk-reserve .pk-piece:not(:first-child) {
     margin-bottom: -85%;
 }
 
