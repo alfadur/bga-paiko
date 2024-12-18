@@ -15,6 +15,7 @@ const State = {
     action: "action",
     saiMove: "saiMove",
     capture: "capture",
+    clientDraft: "clientDraft",
     clientDeploy: "clientDeploy",
     clientMove: "clientMove",
     clientConfirm: "clientConfirm"
@@ -534,7 +535,10 @@ const Paiko = {
 
         if (this.isCurrentPlayerActive()) {
             switch (stateName) {
-                case State.draft: {
+                case State.draft:
+                case State.clientDraft: {
+                    clearTag("pk-selectable");
+                    clearTag("pk-selected");
                     const pieces = document.querySelectorAll(`.pk-reserve .pk-piece[data-player="${this.playerIndex}"]`);
                     for (const piece of pieces) {
                         piece.classList.add("pk-selectable");
@@ -632,6 +636,12 @@ const Paiko = {
 
         if (this.isCurrentPlayerActive()) {
             switch (stateName) {
+                case State.draft:
+                case State.clientDraft: {
+                    clearTag("pk-selectable");
+                    clearTag("pk-selected");
+                    break;
+                }
                 case State.action: {
                     break;
                 }
@@ -650,14 +660,28 @@ const Paiko = {
 
         if (this.isCurrentPlayerActive()) {
             switch (stateName) {
-                case State.draft: {
+                case State.draft:
+                case State.clientDraft: {
                     this.addActionButton("pk-confirm-button", _("Confirm"), () => {
                         const ids = Array.from(document.querySelectorAll(".pk-hand .pk-piece.pk-selectable"))
                             .map(piece => piece.dataset.id)
                             .join(",");
-                        this.bgaPerformAction(Action.draft, { ids });
+                        this.bgaPerformAction(Action.draft, {ids});
                     });
                     document.getElementById("pk-confirm-button").classList.add("disabled");
+                    break;
+                }
+                case State.action: {
+                    const pieces = document.querySelectorAll(`.pk-reserve .pk-piece[data-player="${this.playerIndex}"]`);
+                    if (pieces.length > 0) {
+                        this.addActionButton("pk-draft-button", _("Draft new tiles"), () => {
+                            this.setClientState(State.clientDraft, {
+                                "descriptionmyturn": _("${you} must draft ${count} tile(s) from reserve"),
+                                possibleactions: [Action.draft],
+                                args: {count: 3}
+                            });
+                        });
+                    }
                     break;
                 }
                 case State.clientConfirm: {
@@ -774,7 +798,7 @@ const Paiko = {
             const space = piece.closest(".pk-board-space, .pk-board-hole");
             const type = parseInt(piece.dataset.type);
 
-            if (this.checkAction(Action.draft, true)) {
+            if (this.checkAction(Action.draft, true) && state.name !== State.action) {
                 const hand = findHand(this.playerIndex, type);
                 const count = state.args.count;
                 let drafted = document.querySelectorAll(".pk-hand .pk-piece.pk-selectable").length;
@@ -793,8 +817,10 @@ const Paiko = {
                         _("${you} must draft ${count} tile(s) from reserve"),
                         {count: count - drafted});
                 }
-                console.log(drafted, count);
-                document.getElementById("pk-confirm-button").classList.toggle("disabled", drafted !== count);
+
+                const remaining = document.querySelectorAll(".pk-reserve .pk-piece.pk-selectable").length;
+
+                document.getElementById("pk-confirm-button").classList.toggle("disabled", remaining !== 0 && drafted !== count);
             } else if (this.checkAction(Action.capture, true)) {
                 this.bgaPerformAction(Action.capture, {
                     x: parseInt(space.dataset.x),

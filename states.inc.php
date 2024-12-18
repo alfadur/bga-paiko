@@ -95,7 +95,8 @@ $machinestates = [
         Fsm::OWN_DESCRIPTION => clienttranslate('${you} must perform an action'),
         Fsm::POSSIBLE_ACTIONS => [
             'actDeploy',
-            'actMove'
+            'actMove',
+            'actDraft'
         ],
         Fsm::TRANSITIONS => [
             State::NEXT_TURN => State::NEXT_TURN,

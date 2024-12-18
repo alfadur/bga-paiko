@@ -417,9 +417,6 @@ class Game extends \Table
     public function actDraft(
         #[IntArrayParam] array $ids): void
     {
-        if (count($ids) !== $this->getDraftCount()) {
-            throw new \BgaVisibleSystemException('Invalid draft count');
-        }
         $hand = \PieceStatus::Hand->value;
         $reserve = \PieceStatus::Reserve->value;
         $ids_str = implode(',', $ids);
@@ -431,7 +428,13 @@ class Game extends \Table
               AND status = $reserve
               AND player_id = $playerId
         EOF);
-        if (self::DbAffectedRow() !== count($ids)) {
+
+        $state = (int)$this->gamestate->state_id();
+        $correctCount = $state === \State::ACTION ?
+            self::DbAffectedRow() <= 3 :
+            self::DbAffectedRow() === $this->getDraftCount();
+
+        if (!$correctCount) {
             throw new \BgaVisibleSystemException('Invalid draft tiles');
         }
 
@@ -444,7 +447,13 @@ class Game extends \Table
             'piecesIcon' => "$playerIndex,id,$ids_str"
         ]);
 
-        $this->gamestate->nextState(\State::DRAFT_DISPATCH);
+        $this->set(\GameGlobal::LastPlayer, $playerIndex);
+
+        $this->gamestate->nextState($state === \State::DRAFT ?
+            \State::DRAFT_DISPATCH :
+            \State::NEXT_TURN);
+
+        $this->commitGlobals();
     }
 
     public function actDeploy(
