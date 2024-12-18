@@ -147,8 +147,9 @@ function createBoard(playerIndex) {
     </div>`;
 }
 
-function createHand() {
-    return `<div id="pk-hand">        
+function createHand(playerIndex, type, invert) {
+    invert = invert ? "invert" : "";
+    return `<div id="pk-hand-${playerIndex}-${type}" class="pk-hand ${invert}" data-player="${playerIndex}" data-type="${type}">
     </div>`;
 }
 
@@ -158,6 +159,10 @@ function findSpace(x, y) {
 
 function findHole(x, y) {
     return document.getElementById(`pk-board-hole-${x}-${y}`);
+}
+
+function findHand(playerIndex, type) {
+    return document.getElementById(`pk-hand-${playerIndex}-${type}`)
 }
 
 function getPath(fromX, fromY, toX, toY, orthogonal = false) {
@@ -221,15 +226,24 @@ const Paiko = {
             `<div id="pk-container" data-player="${this.playerIndex}"></div>`);
 
         const board = createElement(container, createBoard(this.playerIndex));
-        const hand = createElement(container, createHand(this.playerIndex));
+        const boardSpaces = document.getElementById("pk-board-spaces");
 
         for (const playerId of playerIds) {
             const player = players[playerId];
             player.index = parseInt(player.no) - 1;
 
+            const types = Object.keys(PieceType);
+            if ((player.index !== this.playerIndex)) {
+                types.reverse();
+            }
+            for (const type of types) {
+                createElement(boardSpaces, createHand(player.index, PieceType[type], this.playerIndex === 1));
+            }
+
             const pieces = data.pieces.filter(piece => piece.player_id === playerId && piece.x === null);
 
             for (const piece of pieces) {
+                const hand = findHand(player.index, piece.type);
                 this.addPiece(hand, player.index, parseInt(piece.type), player.index * 2);
             }
         }
@@ -260,7 +274,7 @@ const Paiko = {
         if (this.isCurrentPlayerActive()) {
             switch (stateName) {
                 case State.action: {
-                    const pieces = document.querySelectorAll("#pk-hand .pk-piece, .pk-board-space .pk-piece");
+                    const pieces = document.querySelectorAll(`.pk-hand[data-player="${this.playerIndex}"] .pk-piece, .pk-board-space .pk-piece[data-player="${this.playerIndex}"]`);
                     for (const piece of pieces) {
                         piece.classList.add("pk-selectable");
                     }
@@ -507,7 +521,7 @@ const Paiko = {
         const playerIndex = this.gamedatas.players[playerId].index;
         const piece = parseInt(playerId) === this.player_id ?
             this.gamedatas.gamestate.args.selectedPiece :
-            document.querySelector(`#pk-hand .pk-piece[data-type="${type}"][data-player="${playerIndex}"]`);
+            document.querySelector(`.pk-hand .pk-piece[data-type="${type}"][data-player="${playerIndex}"]`);
         if (piece) {
             findSpace(x, y).appendChild(piece);
             setStyle(piece, {angle});
