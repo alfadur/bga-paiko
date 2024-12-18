@@ -53,9 +53,31 @@ const PieceThreat = [
 ];
 Object.freeze(PieceThreat);
 
+const PieceCover = [
+    [[-1, 0], [1, 0]],
+    [],
+    [],
+    [[-1, -1], [0, -1], [1, -1], [-1, 0], [0, 0], [1, 0], [-1, 1], [0, 1], [1, 1]],
+    [],
+    [],
+    [],
+    [[0, -1], [-1, 0], [1, 0], [0, 1]]
+];
+Object.freeze(PieceCover);
+
 const Directions = [[0, -1], [1, 0], [0, 1], [-1, 0]]
     .map(([x, y]) => ({x, y}));
 Object.freeze(Directions);
+
+function range(count) {
+    const result = [];
+    if (arguments.length === 1) {
+        for (let i = 0; i < count; ++i) {
+            result.push(i);
+        }
+    }
+    return result;
+}
 
 function intMod(a, b) {
     return (a % b + b) % b;
@@ -149,7 +171,7 @@ function createBoard(playerIndex) {
                 x > 6 && y < 7 ? 2 :
                                  0;
 
-            spaces.push(`<div id="pk-board-space-${x}-${y}" class="${className}"
+            spaces.push(`<div id="${className}-${x}-${y}" class="${className}"
                 data-x="${x}" data-y="${y}" data-side="${side}" 
                 style="--column: ${column}; --row: ${row};"></div>`);
         }
@@ -208,10 +230,23 @@ function getPath(fromX, fromY, toX, toY, orthogonal = false) {
     return path;
 }
 
-function getThreat(spaceX, spaceY) {
+function getLocalCoords(x, y, angle) {
+    const direction = Directions[intMod(parseInt(angle), 4)];
+
+    return {
+        dx: -direction.x * y - direction.y * x,
+        dy: direction.x * x - direction.y * y,
+    }
+}
+
+function getField(field, spaceX, spaceY, ignores = []) {
     const pieces = [];
     for (let y = spaceY - 4; y <= spaceY + 4; ++y) {
         for (let x = spaceX - 4; x <= spaceX + 4; ++x) {
+            if (ignores.some(ignore => ignore.x === x && ignore.y === y)) {
+                continue;
+            }
+
             const piece = document.querySelector(`#pk-board-space-${x}-${y} .pk-piece`);
             if (piece) {
                 pieces.push(piece);
@@ -226,14 +261,9 @@ function getThreat(spaceX, spaceY) {
         const type = parseInt(piece.dataset.type);
         const pieceX = parseInt(piece.parentElement.dataset.x);
         const pieceY = parseInt(piece.parentElement.dataset.y);
-        const angle = getStyle(piece, {angle: null}).angle;
-        const direction = Directions[intMod(angle, 4)];
 
-        for (const [x, y] of  PieceThreat[type]) {
-            const {dx, dy} = {
-                dx: -direction.x * y - direction.y * x,
-                dy: direction.x * x - direction.y * y,
-            }
+        for (const [x, y] of field[type]) {
+            const {dx, dy} = getLocalCoords(x, y, getStyle(piece, {angle: null}).angle);
 
             if (pieceX + dx === spaceX && pieceY + dy === spaceY) {
                 if (type === PieceType.fire) {
@@ -244,6 +274,19 @@ function getThreat(spaceX, spaceY) {
         }
     }
 
+    return threat;
+}
+
+function getThreat(spaceX, spaceY, covered = false, ignores = []) {
+    const threat = getField(PieceThreat, spaceX, spaceY, ignores);
+    if (covered) {
+        const cover = getField(PieceCover, spaceX, spaceY, ignores);
+        for (let index = 0; index < 1; ++index) {
+            const isBase = index ? spaceX > 6 && spaceY < 7 : spaceX < 7 && spaceY > 6;
+            const coverValue = Math.sign(cover[index] + (isBase ? 1 : 0));
+            threat[1 - index] = Math.max(0, threat[1 - index] - coverValue);
+        }
+    }
     return threat;
 }
 
@@ -271,8 +314,116 @@ function prepareDeploy(playerIndex, piece) {
     return result;
 }
 
-function prepareMove(piece) {
-    return document.querySelectorAll(".pk-board-space:empty")
+class Queue {
+    values = [];
+    offset = 0;
+
+    isEmpty() { return this.offset === this.values.length; }
+    enqueue(value) { this.values.push(value); }
+    dequeue() { return this.isEmpty() ? undefined : this.values[this.offset++]; }
+}
+
+function *spacesAround(space) {
+    let index = 0;
+    for (const direction of Directions) {
+        const {x, y} = direction;
+        yield [index++, {x: space.x + x, y: space.y + y}];
+    }
+}
+
+function* collectPaths(x, y, range) {
+    const queue = new Queue;
+    const visited = new Set;
+
+    const startPath = {
+        space: {x, y},
+        steps: []
+    };
+
+    queue.enqueue(startPath);
+    visited.add(JSON.stringify(startPath.space));
+
+    while (!queue.isEmpty()) {
+        const {space, steps} = queue.dequeue();
+        if (steps.length < range) {
+            for (const [directionIndex, newSpace] of spacesAround(space)) {
+                const value = JSON.stringify(newSpace);
+
+                if (!visited.has(value)) {
+                    visited.add(value);
+                    const newPath = {
+                        space: newSpace,
+                        steps: [...steps, directionIndex]
+                    };
+                    const isPassable = yield newPath;
+                    if (isPassable === undefined || isPassable) {
+                        queue.enqueue(newPath);
+                    }
+                }
+            }
+        }
+    }
+}
+
+function checkCaptures(playerIndex, sourceX, sourceY, angle, offsets, additionalThreat, ignores) {
+    for (const [x, y] of offsets) {
+        const {dx, dy} = getLocalCoords(x, y, angle);
+        const spaceX = sourceX + dx;
+        const spaceY = sourceY + dy;
+
+        if (ignores.every(({x, y}) => x !== spaceX || y !== spaceY)) {
+            const space = findSpace(spaceX, spaceY) || findHole(spaceX, spaceY);
+            if (space && space.querySelector(`.pk-piece[data-player="${playerIndex}"]`)) {
+                const threat = getThreat(spaceX, spaceY, true, ignores);
+                if (threat[1 - playerIndex] + additionalThreat >= 2) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+function prepareMove(playerIndex, piece, sourceX, sourceY, angle) {
+    const movementRange =
+        piece === PieceType.lotus || piece === PieceType.air ? 0 :
+        piece === PieceType.earth ? 1 : 2;
+    const ignores = piece === PieceType.fire ? [{x: sourceX, y: sourceY}] : [];
+    const result = [];
+
+    if (piece === PieceType.sai
+        && checkCaptures(playerIndex, sourceX, sourceY, angle, PieceCover[piece], 0, [{x: sourceX, y: sourceY}])) {
+        return result;
+    }
+
+    const paths = collectPaths(sourceX, sourceY, movementRange);
+    let item = paths.next();
+
+    while (!item.done) {
+        const path = item.value;
+        const space = findSpace(path.space.x, path.space.y);
+        let threatened = false;
+        let selfCaptures = false;
+
+        if (space) {
+            const x = parseInt(space.dataset.x);
+            const y = parseInt(space.dataset.y);
+            const threat = getThreat(x, y, true, ignores);
+            threatened = threat[1 - playerIndex] >= (piece === PieceType.fire ? 1 : 2);
+
+            if (piece === PieceType.fire) {
+                selfCaptures = range(4).some(angle => checkCaptures(playerIndex, x, y, angle, PieceThreat[piece], 1, ignores));
+            }
+        }
+
+        const isPassable = !threatened && space && space.querySelector(".pk-piece") === null;
+        if (isPassable && !selfCaptures) {
+            result.push(path);
+        }
+        item = paths.next(isPassable);
+    }
+
+    return result;
 }
 
 function getCoordsPieces(bits) {
@@ -355,7 +506,10 @@ const Paiko = {
                 case State.action: {
                     const pieces = document.querySelectorAll(`.pk-hand[data-player="${this.playerIndex}"] .pk-piece, .pk-board-space .pk-piece[data-player="${this.playerIndex}"]`);
                     for (const piece of pieces) {
-                        piece.classList.add("pk-selectable");
+                        const type = parseInt(piece.dataset.type);
+                        if (piece.closest(".pk-hand") !== null || type !== PieceType.lotus && type !== PieceType.air) {
+                            piece.classList.add("pk-selectable");
+                        }
                     }
                     break;
                 }
@@ -392,13 +546,26 @@ const Paiko = {
                     break;
                 }
                 case State.clientMove: {
-                    const spaces = prepareMove(state.args.selectedPiece);
-                    for (const space of spaces) {
-                        space.classList.add("pk-selectable");
+                    const selectedPiece = state.args.selectedPiece;
+                    const type = parseInt(selectedPiece.dataset.type);
+                    const angle = getStyle(selectedPiece, {angle: null}).angle;
+                    const x = parseInt(selectedPiece.parentElement.dataset.x);
+                    const y = parseInt(selectedPiece.parentElement.dataset.y);
+
+                    this.paths = prepareMove(this.playerIndex, type, x, y, angle);
+                    for (const {space: {x, y}} of this.paths) {
+                        findSpace(x, y).classList.add("pk-selectable");
+                    }
+
+                    if (type === PieceType.water) {
+                        const spaces = prepareDeploy(this.playerIndex, type);
+                        for (const space of spaces) {
+                            space.classList.add("pk-selectable");
+                        }
                     }
 
                     if (!this.checkAction(Action.skip, true)) {
-                        const pieces = document.querySelectorAll(".pk-board-space .pk-piece");
+                        const pieces = document.querySelectorAll(`.pk-board-space .pk-piece[data-player="${this.playerIndex}"]`);
                         for (const piece of pieces) {
                             piece.classList.add("pk-selectable");
                         }
@@ -449,14 +616,11 @@ const Paiko = {
                     this.addActionButton("confirm-button", _("Confirm"), () => {
                         const {selectedPiece, sourceSpace, targetSpace} = args;
                         const type = parseInt(selectedPiece.dataset.type);
+                        const x = parseInt(targetSpace.dataset.x);
+                        const y = parseInt(targetSpace.dataset.y);
+                        const path = this.paths.filter(({space}) => space.x === x && space.y === y)[0];
 
-                        const path = getPath(
-                            parseInt(sourceSpace.dataset.x),
-                            parseInt(sourceSpace.dataset.y),
-                            parseInt(targetSpace.dataset.x),
-                            parseInt(targetSpace.dataset.y),
-                            type === PieceType.water);
-                        if (path === null) {
+                        if (!path) {
                             this.bgaPerformAction(Action.deploy, {
                                 x: targetSpace.dataset.x,
                                 y: targetSpace.dataset.y,
