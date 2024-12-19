@@ -178,15 +178,13 @@
     height: 100%;
 }
 
-.roundedbox .pk-piece, #pk-hand .pk-piece {
-    --piece-size: 50px;
+.roundedbox .pk-piece {
+    --piece-size: 40px;
     display: inline-block;
     width: var(--piece-size);
     height: var(--piece-size);
+    margin: 4px;
     vertical-align: middle;
-}
-
-.roundedbox .pk-piece {
     pointer-events: none;
 }
 
@@ -204,7 +202,7 @@
 .pk-piece-shadow {
     width: 100%;
     height: 100%;
-    margin-top: -1%;
+    margin-top: -2%;
     border-radius: 100%;
     box-shadow: 0 4px 4px black;
 }

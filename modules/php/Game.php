@@ -346,8 +346,11 @@ class Game extends \Table
         $this->switchPlayer();
 
         $captures = $this->get(\GameGlobal::Captures);
+        $isFire = false;
+
         if ($captures === 0) {
             $captures = $this->get(\GameGlobal::FireCaptures);
+            $isFire = true;
         }
         if ($captures === 0) {
             $this->gamestate->nextState(\State::NEXT_TURN);
@@ -360,10 +363,16 @@ class Game extends \Table
                 WHERE x = $x AND y = $y
                 EOF);
 
-            $this->notifyAllPlayers('Capture', clienttranslate('${pieceIcon} is captured'), [
+            $this->set($isFire ? \GameGlobal::FireCaptures : \GameGlobal::Captures, $captures >> 8);
+
+            $playerId = $this->getActivePlayerId();
+            $playerIndex = 2 - $this->getPlayerNoById($playerId);
+
+            $coord = $captures & 0xFF;
+            $this->notifyAllPlayers('Capture', clienttranslate('${piecesIcon} is captured'), [
                 'x' => $x,
                 'y' => $y,
-                'pieceIcon' => '0,0'
+                'piecesIcon' => "$playerIndex,coord,$coord"
             ]);
             $this->gamestate->nextState(\State::RESERVE);
         }
@@ -419,7 +428,11 @@ class Game extends \Table
     {
         $state = (int)$this->gamestate->state_id();
         $playerId = $this->getActivePlayerId();
-        $draftCount = $state === \State::ACTION ? 3 : $this->getDraftCount();
+        $draftCount = match ($state) {
+            \State::DRAFT => $this->getDraftCount(),
+            \State::RESERVE => 1,
+            default => 3
+        };
 
         $hand = \PieceStatus::Hand->value;
         $reserve = \PieceStatus::Reserve->value;
@@ -442,23 +455,32 @@ class Game extends \Table
             self::DbAffectedRow() === $draftCount;
 
         if (!$correctCount) {
-            throw new \BgaVisibleSystemException('Invalid draft');
+            throw new \BgaVisibleSystemException('Invalid draw');
         }
 
         $playerIndex = $this->getPlayerNoById($playerId) - 1;
 
-        $this->notifyAllPlayers('Draft', clienttranslate('${player_name} drafts ${piecesIcon}'), [
+        if ($state === \State::RESERVE) {
+            $playerIndex = 1 - $playerIndex;
+        } else {
+            $this->set(\GameGlobal::LastPlayer, $playerIndex);
+        }
+
+        $message = $state === \State::RESERVE ?
+            clienttranslate('${player_name} chooses  ${piecesIcon} for the opponent to draw from reserve') :
+            clienttranslate('${player_name} draws ${piecesIcon} from reserve');
+        $this->notifyAllPlayers('Draft', $message, [
             'player_name' => $this->getPlayerNameById($playerId),
             'playerIndex' => $playerIndex,
             'pieceIds' => $ids,
             'piecesIcon' => "$playerIndex,id,$ids_str"
         ]);
 
-        $this->set(\GameGlobal::LastPlayer, $playerIndex);
-
-        $this->gamestate->nextState($state === \State::DRAFT ?
-            \State::DRAFT_DISPATCH :
-            \State::NEXT_TURN);
+        $this->gamestate->nextState(match ($state) {
+            \State::DRAFT => \State::DRAFT_DISPATCH,
+            \State::RESERVE => \State::CAPTURE,
+            default => \State::NEXT_TURN
+        });
 
         $this->commitGlobals();
     }
@@ -543,15 +565,13 @@ class Game extends \Table
             'pieceIcon' => "$playerIndex,$type"
         ]);
 
-        if ($piece === PieceType::Lotus) {
-            $pieces[] = [
-                'x' => $x,
-                'y' => $y,
-                'type' => $piece->value,
-                'angle' => $angle,
-                'player_id' => $playerId
-            ];
-        }
+        $pieces[] = [
+            'x' => $x,
+            'y' => $y,
+            'type' => $piece->value,
+            'angle' => $angle,
+            'player_id' => $playerId
+        ];
 
         $this->set(\GameGlobal::LastPlayer, $playerIndex);
 

@@ -56,8 +56,8 @@ $machinestates = [
     State::DRAFT => [
         Fsm::NAME => 'draft',
         Fsm::TYPE => FsmType::SINGLE_PLAYER,
-        Fsm::DESCRIPTION => clienttranslate('${actplayer} must draft tiles from reserve'),
-        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must draft ${count} tile(s) from reserve'),
+        Fsm::DESCRIPTION => clienttranslate('${actplayer} must draw tiles from reserve'),
+        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must draw ${count} tile(s) from reserve'),
         Fsm::ARGUMENTS => 'argDraft',
         Fsm::POSSIBLE_ACTIONS => ['actDraft'],
         Fsm::TRANSITIONS => [
@@ -136,9 +136,9 @@ $machinestates = [
         Fsm::NAME => 'reserve',
         Fsm::TYPE => FsmType::SINGLE_PLAYER,
         Fsm::DESCRIPTION => clienttranslate('${actplayer} must choose a tile from the opponents reserve'),
-        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must choose a tile from reserve for the opponent to draft'),
+        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must choose a tile from reserve for the opponent to draw'),
         Fsm::POSSIBLE_ACTIONS => [
-            'actReserve'
+            'actDraft'
         ],
         Fsm::TRANSITIONS => [
             State::CAPTURE => State::CAPTURE

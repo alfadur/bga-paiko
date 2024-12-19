@@ -14,7 +14,7 @@ const State = {
     draft: "draft",
     action: "action",
     saiMove: "saiMove",
-    reserve: "capture",
+    reserve: "reserve",
     clientDraft: "clientDraft",
     clientDeploy: "clientDeploy",
     clientMove: "clientMove",
@@ -185,6 +185,10 @@ function createBoard(playerIndex) {
             spaces.push(`<div id="${className}-${x}-${y}" class="${className}"
                 data-x="${x}" data-y="${y}" data-side="${side}" 
                 style="--column: ${column}; --row: ${row};"></div>`);
+
+            if (playerIndex) {
+                spaces.reverse();
+            }
         }
     }
     return `<div id="pk-board">
@@ -249,7 +253,8 @@ function getField(field, spaceX, spaceY, ignores = []) {
                 continue;
             }
 
-            const piece = document.querySelector(`#pk-board-space-${x}-${y} .pk-piece`);
+            const space = findSpace(x, y) || findHole(x, y);
+            const piece = space && space.querySelector(".pk-piece");
             if (piece) {
                 pieces.push(piece);
             }
@@ -283,7 +288,7 @@ function getThreat(spaceX, spaceY, covered = false, ignores = []) {
     const threat = getField(PieceThreat, spaceX, spaceY, ignores);
     if (covered) {
         const cover = getField(PieceCover, spaceX, spaceY, ignores);
-        for (let index = 0; index < 1; ++index) {
+        for (const index of range(2)) {
             const isBase = index ? spaceX > 6 && spaceY < 7 : spaceX < 7 && spaceY > 6;
             const coverValue = Math.sign(cover[index] + (isBase ? 1 : 0));
             threat[1 - index] = Math.max(0, threat[1 - index] - coverValue);
@@ -494,7 +499,7 @@ const Paiko = {
 
         for (const {player_id: playerId, id, x, y, type, angle, status} of data.pieces) {
             if (x !== null) {
-                this.addPiece(id, findSpace(x, y), players[playerId].index, type, parseInt(angle));
+                this.addPiece(id, findSpace(x, y) || findHole(x, y), players[playerId].index, type, parseInt(angle));
             }
         }
 
@@ -532,7 +537,7 @@ const Paiko = {
                     break;
                 }
                 case State.action: {
-                    const pieces = document.querySelectorAll(`.pk-hand[data-player="${this.playerIndex}"] .pk-piece, .pk-board-space .pk-piece[data-player="${this.playerIndex}"]`);
+                    const pieces = document.querySelectorAll(`.pk-hand[data-player="${this.playerIndex}"] .pk-piece, .pk-board-space .pk-piece[data-player="${this.playerIndex}"]:not([data-type="3"]):not([data-type="4"])`);
                     for (const piece of pieces) {
                         const type = parseInt(piece.dataset.type);
                         if (piece.closest(".pk-hand") !== null || type !== PieceType.lotus && type !== PieceType.air) {
@@ -640,7 +645,8 @@ const Paiko = {
         if (this.isCurrentPlayerActive()) {
             switch (stateName) {
                 case State.draft:
-                case State.clientDraft: {
+                case State.clientDraft:
+                case State.reserve: {
                     this.addActionButton("pk-confirm-button", _("Confirm"), () => {
                         const ids = Array.from(document.querySelectorAll(".pk-hand .pk-piece.pk-selectable"))
                             .map(piece => piece.dataset.id)
@@ -653,9 +659,9 @@ const Paiko = {
                 case State.action: {
                     const pieces = document.querySelectorAll(`.pk-reserve .pk-piece[data-player="${this.playerIndex}"]`);
                     if (pieces.length > 0) {
-                        this.addActionButton("pk-draft-button", _("Draft new tiles"), () => {
+                        this.addActionButton("pk-draft-button", _("Draw new tiles"), () => {
                             this.setClientState(State.clientDraft, {
-                                "descriptionmyturn": _("${you} must draft ${count} tile(s) from reserve"),
+                                "descriptionmyturn": _("${you} must draw ${count} tile(s) from reserve"),
                                 possibleactions: [Action.draft],
                                 args: {count: 3}
                             });
@@ -672,7 +678,6 @@ const Paiko = {
             const cancellableStates = [
                 State.clientDraft,
                 State.clientDeploy,
-                //State.clientMove,
                 State.clientConfirm];
             if (cancellableStates.indexOf(stateName) >= 0) {
                 this.addActionButton("pk-cancel", _("Cancel"), () => this.cancelAction(stateName, args), null, null, "gray");
@@ -692,7 +697,6 @@ const Paiko = {
     },
 
     async cancelAction(stateName, args) {
-        debugger;
         if (stateName === State.clientDraft) {
             const drafted = document.querySelectorAll(".pk-hand .pk-piece.pk-selectable");
             for (const piece of drafted) {
@@ -700,7 +704,7 @@ const Paiko = {
                 await this.wait(120);
             }
         } else if (stateName === State.clientMove) {
-            this.animateMovePiece(piece, args.sourceSpace);
+            this.animateMovePiece(args.selectedPiece, args.sourceSpace);
         } else if (stateName === State.clientConfirm) {
             const piece = findSelectedPiece();
             piece.classList.remove("pk-selected");
@@ -840,7 +844,7 @@ const Paiko = {
                 const index = state.name === State.reserve ? 1 - this.playerIndex : this.playerIndex
                 const hand = findHand(index, type);
 
-                const count = state.args.count;
+                const count = (state.args && state.args.count) || 1;
                 let drafted = document.querySelectorAll(".pk-hand .pk-piece.pk-selectable").length;
 
                 if (piece.parentElement !== hand) {
@@ -849,24 +853,24 @@ const Paiko = {
                         this.animateMovePiece(piece, hand);
                         if (drafted === count) {
                             this.statusBar.setTitle(
-                                _("${you} must confirm the draft"));
+                                _("${you} must confirm the drawn tiles"));
                         } else {
                             this.statusBar.setTitle(
-                                _("${you} must draft ${count} tile(s) from reserve"),
+                                _("${you} must draw ${count} tile(s) from reserve"),
                                 {count: count - drafted});
                         }
                     }
                 } else {
                     --drafted;
-                    this.animateMovePiece(piece, findReserve(this.playerIndex, type));
+                    this.animateMovePiece(piece, findReserve(index, type));
                     if (state.name === State.reserve) {
                         this.statusBar.setTitle(
-                            _("${you} must choose a piece from reserve for the opponent to draft"),
+                            _("${you} must choose a piece from reserve for the opponent to draw"),
                             {count: count - drafted});
 
                     } else {
                         this.statusBar.setTitle(
-                            _("${you} must draft ${count} tile(s) from reserve"),
+                            _("${you} must draw ${count} tile(s) from reserve"),
                             {count: count - drafted});
                     }
                 }
@@ -906,12 +910,18 @@ const Paiko = {
     },
 
     async onNotificationDeploy({playerId, type, x, y, angle, score}) {
+        clearTag("pk-selected");
+        clearTag("pk-selectable");
+
         const playerIndex = this.gamedatas.players[playerId].index;
         const piece = parseInt(playerId) === this.player_id ?
             this.gamedatas.gamestate.args.selectedPiece :
             document.querySelector(`.pk-hand .pk-piece[data-type="${type}"][data-player="${playerIndex}"]`);
         if (piece) {
-            await this.animateMovePiece(piece, findSpace(x, y), angle)
+            const space = findSpace(x, y) || findHole(x, y);
+            if (piece.parentElement !== space || getStyle(piece, {angle: null}.angle !== angle)) {
+                await this.animateMovePiece(piece, findSpace(x, y) || findHole(x, y), angle)
+            }
         }
         if (score !== 0) {
             this.scoreCtrl[playerId].incValue(score);
@@ -919,6 +929,9 @@ const Paiko = {
     },
 
     async onNotificationMove({playerId, from, to, angle, score}) {
+        clearTag("pk-selected");
+        clearTag("pk-selectable");
+
         if (parseInt(playerId) !== this.player_id) {
             const piece = findSpace(from[0], from[1]).firstElementChild;
             const space = findSpace(to[0], to[1]);
@@ -948,7 +961,6 @@ const Paiko = {
     async onNotificationDraft({playerIndex, pieceIds}) {
         for (const id of pieceIds) {
             const piece = document.getElementById(`pk-piece-${id}`);
-            console.log(piece);
             const hand = findHand(playerIndex, piece.dataset.type);
             await this.animateMovePiece(piece, hand);
         }
@@ -963,7 +975,16 @@ const Paiko = {
         for (const value of values) {
             if (property === "id") {
                 const piece = document.getElementById(`pk-piece-${value}`);
-                result.push(createPiece(null, playerIndex, piece.dataset.type));
+                if (piece) {
+                    result.push(createPiece(null, playerIndex, piece.dataset.type));
+                }
+            } else if (property === "coord") {
+                const coord = parseInt(value);
+                const space = findSpace(coord & 0xF, coord >> 4);
+                const piece = space && space.querySelector(".pk-piece");
+                if (piece) {
+                    result.push(createPiece(null, playerIndex, piece.dataset.type));
+                }
             }
         }
         return result.join("");
