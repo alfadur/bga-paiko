@@ -9,13 +9,12 @@
 
 CREATE TABLE IF NOT EXISTS `piece` (
     `id` TINYINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `player_id` INTEGER UNSIGNED NOT NULL,
+    `player` TINYINT UNSIGNED NOT NULL,
     `type` TINYINT UNSIGNED NOT NULL,
     `x` TINYINT NULL,
     `y` TINYINT NULL,
     `angle` TINYINT NOT NULL DEFAULT  0,
     `status` TINYINT NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
-    UNIQUE KEY (`x`, `y`),
-    FOREIGN KEY (`player_id`) REFERENCES `player`(`player_id`)
+    UNIQUE KEY (`x`, `y`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1;

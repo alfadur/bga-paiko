@@ -38,7 +38,7 @@ enum GameGlobal: string {
     case FireCaptures = 'fire_captures';
     case LastPiece = 'last_piece';
     case Score = 'score';
-    case LastPlayer = 'capture_player';
+    case LastPlayer = 'last_player';
 
     final const IDS = [
         self::SaiCoords->value => 10,

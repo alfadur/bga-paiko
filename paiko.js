@@ -1,4 +1,5 @@
 /**
+/**
  *------
  * BGA framework: Gregory Isabelli & Emmanuel Colin & BoardGameArena
  * Paiko implementation : © <Your name here> <Your email address here>
@@ -218,6 +219,10 @@ function createReserve(playerIndex, type, invert) {
 
 function findSpace(x, y) {
     return document.getElementById(`pk-board-space-${x}-${y}`);
+}
+
+function findPiece(id) {
+    return document.getElementById(`pk-piece-${id}`);
 }
 
 function findSelectedPiece() {
@@ -480,7 +485,7 @@ const Paiko = {
                 createElement(boardSpaces, createReserve(player.index, PieceType[type], this.playerIndex === 1));
             }
 
-            const pieces = data.pieces.filter(piece => piece.player_id === playerId && parseInt(piece.status) !== PieceStatus.board);
+            const pieces = data.pieces.filter(piece => parseInt(piece.player) === player.index && parseInt(piece.status) !== PieceStatus.board);
 
             for (const piece of pieces) {
                 const parent =
@@ -497,9 +502,9 @@ const Paiko = {
             });
         }
 
-        for (const {player_id: playerId, id, x, y, type, angle, status} of data.pieces) {
-            if (x !== null) {
-                this.addPiece(id, findSpace(x, y) || findHole(x, y), players[playerId].index, type, parseInt(angle));
+        for (const {player, id, x, y, type, angle, status} of data.pieces) {
+            if (parseInt(status) === PieceStatus.board) {
+                this.addPiece(id, findSpace(x, y) || findHole(x, y), parseInt(player), type, parseInt(angle));
             }
         }
 
@@ -537,7 +542,8 @@ const Paiko = {
                     break;
                 }
                 case State.action: {
-                    const pieces = document.querySelectorAll(`.pk-hand[data-player="${this.playerIndex}"] .pk-piece, .pk-board-space .pk-piece[data-player="${this.playerIndex}"]:not([data-type="3"]):not([data-type="4"])`);
+                    const pieces = document.querySelectorAll(`.pk-hand[data-player="${this.playerIndex}"] .pk-piece:last-child, .pk-board-space .pk-piece[data-player="${this.playerIndex}"]`);
+
                     for (const piece of pieces) {
                         const type = parseInt(piece.dataset.type);
                         if (piece.closest(".pk-hand") !== null || type !== PieceType.lotus && type !== PieceType.air) {
@@ -556,19 +562,11 @@ const Paiko = {
                         args: {
                             sourceSpace: piece.parentElement,
                             selectedPiece: piece,
-                            pieceIcon: `${this.playerIndex},${piece.dataset.type}`,
+                            pieceIcon: `${this.playerIndex},${piece.dataset.id}`,
                             canSkip: true
                         },
                         possibleactions: [Action.clientMove, Action.skip]
                     });
-                    break;
-                }
-                case State.capture: {
-                    const captures = state.args.captures || state.args.fireCaptures;
-                    const pieces = getCoordsPieces(captures);
-                    for (const piece of pieces) {
-                        piece.classList.add("pk-selectable");
-                    }
                     break;
                 }
                 case State.clientDeploy: {
@@ -598,12 +596,12 @@ const Paiko = {
                         }
                     }
 
-                    if (!this.checkAction(Action.skip, true)) {
+                    /*if (!this.checkAction(Action.skip, true)) {
                         const pieces = document.querySelectorAll(`.pk-board-space .pk-piece[data-player="${this.playerIndex}"]`);
                         for (const piece of pieces) {
                             piece.classList.add("pk-selectable");
                         }
-                    }
+                    }*/
 
                     break;
                 }
@@ -708,13 +706,23 @@ const Paiko = {
         } else if (stateName === State.clientConfirm) {
             const piece = findSelectedPiece();
             piece.classList.remove("pk-selected");
-            if (this.checkAction(Action.move, true)) {
+
+            const actions = this.gamedatas.gamestate.possibleactions;
+            if (actions.indexOf(Action.move) >= 0) {
                 this.animateMovePiece(piece, args.sourceSpace, args.angle);
-            } else if (this.checkAction(Action.deploy, true)) {
+            } else if (actions.indexOf(Action.deploy) >= 0) {
                 this.animateMovePiece(piece, findHand(this.playerIndex, piece.dataset.type), args.angle);
             }
         }
         this.restoreServerGameState()
+    },
+
+    cancelOtherActions(currentPiece) {
+        const selectedPiece = findSelectedPiece();
+        if (selectedPiece && selectedPiece !== currentPiece) {
+            const state = this.gamedatas.gamestate;
+            this.cancelAction(state.name, state.args);
+        }
     },
 
     confirmAction(stateName, args) {
@@ -728,6 +736,7 @@ const Paiko = {
 
             if (!path) {
                 this.bgaPerformAction(Action.deploy, {
+                    id: selectedPiece.dataset.id,
                     x: targetSpace.dataset.x,
                     y: targetSpace.dataset.y,
                     type: type,
@@ -736,6 +745,7 @@ const Paiko = {
                 })
             } else {
                 this.bgaPerformAction(Action.move, {
+                    id: selectedPiece.dataset.id,
                     x: sourceSpace.dataset.x,
                     y: sourceSpace.dataset.y,
                     steps: path.steps.join(","),
@@ -745,6 +755,7 @@ const Paiko = {
             }
         } else {
             this.bgaPerformAction(Action.deploy, {
+                id: selectedPiece.dataset.id,
                 type: selectedPiece.dataset.type,
                 x: parseInt(targetSpace.dataset.x),
                 y: parseInt(targetSpace.dataset.y),
@@ -802,7 +813,7 @@ const Paiko = {
                         angle: getStyle(piece, {angle: null}).angle,
                         x: parseInt(space.dataset.x),
                         y: parseInt(space.dataset.y),
-                        pieceIcon: `${this.playerIndex},${piece.dataset.type}`,
+                        pieceIcon: `${this.playerIndex},${piece.dataset.id}`,
                     },
                     possibleactions: [Action.deploy]
                 })
@@ -825,7 +836,7 @@ const Paiko = {
                         angle: getStyle(piece, {angle: null}).angle,
                         x: parseInt(space.dataset.x),
                         y: parseInt(space.dataset.y),
-                        pieceIcon: `${this.playerIndex},${piece.dataset.type}`,
+                        pieceIcon: `${this.playerIndex},${piece.dataset.id}`,
                         canSkip: this.gamedatas.gamestate.args && this.gamedatas.gamestate.args.canSkip
                     },
                     possibleactions: actions
@@ -884,7 +895,7 @@ const Paiko = {
                     descriptionmyturn: _("${you} must select the space to deploy ${pieceIcon}"),
                     args: {
                         selectedPiece: piece,
-                        pieceIcon: `${this.playerIndex},${piece.dataset.type}`
+                        pieceIcon: `${this.playerIndex},${piece.dataset.id}`
                     },
                     possibleactions: [Action.deploy]
                 });
@@ -900,7 +911,7 @@ const Paiko = {
                     args: {
                         sourceSpace: piece.parentElement,
                         selectedPiece: piece,
-                        pieceIcon: `${this.playerIndex},${piece.dataset.type}`
+                        pieceIcon: `${this.playerIndex},${piece.dataset.id}`
                     },
                     possibleactions: [Action.clientMove]
                 });
@@ -909,36 +920,17 @@ const Paiko = {
         }
     },
 
-    async onNotificationDeploy({playerId, type, x, y, angle, score}) {
+    async onNotificationMove({playerId, id, x, y, angle, score, isDeploy}) {
+        const piece = findPiece(id);
+        this.cancelOtherActions(piece);
         clearTag("pk-selected");
         clearTag("pk-selectable");
 
-        const playerIndex = this.gamedatas.players[playerId].index;
-        const piece = parseInt(playerId) === this.player_id ?
-            this.gamedatas.gamestate.args.selectedPiece :
-            document.querySelector(`.pk-hand .pk-piece[data-type="${type}"][data-player="${playerIndex}"]`);
-        if (piece) {
-            const space = findSpace(x, y) || findHole(x, y);
-            if (piece.parentElement !== space || getStyle(piece, {angle: null}.angle !== angle)) {
-                await this.animateMovePiece(piece, findSpace(x, y) || findHole(x, y), angle)
-            }
+        const space = findSpace(x, y) || findHole(x, y);
+        if (piece.parentElement !== space || getStyle(piece, {angle: null}.angle !== angle)) {
+            await this.animateMovePiece(piece, space, angle)
         }
-        if (score !== 0) {
-            this.scoreCtrl[playerId].incValue(score);
-        }
-    },
 
-    async onNotificationMove({playerId, from, to, angle, score}) {
-        clearTag("pk-selected");
-        clearTag("pk-selectable");
-
-        if (parseInt(playerId) !== this.player_id) {
-            const piece = findSpace(from[0], from[1]).firstElementChild;
-            const space = findSpace(to[0], to[1]);
-            if (piece.parentElement !== space){
-                await this.animateMovePiece(piece, space, angle)
-            }
-        }
         if (score !== 0) {
             this.scoreCtrl[playerId].incValue(score);
         }
@@ -966,26 +958,11 @@ const Paiko = {
         }
     },
 
-    formatPiece(playerIndex, type) {
-        return createPiece(null, playerIndex, type);
-    },
-
-    formatPieces(playerIndex, property, ...values) {
+    formatPiece(playerIndex, ...ids) {
         const result = [];
-        for (const value of values) {
-            if (property === "id") {
-                const piece = document.getElementById(`pk-piece-${value}`);
-                if (piece) {
-                    result.push(createPiece(null, playerIndex, piece.dataset.type));
-                }
-            } else if (property === "coord") {
-                const coord = parseInt(value);
-                const space = findSpace(coord & 0xF, coord >> 4);
-                const piece = space && space.querySelector(".pk-piece");
-                if (piece) {
-                    result.push(createPiece(null, playerIndex, piece.dataset.type));
-                }
-            }
+        for (const id of ids) {
+            const type = Math.floor(parseInt(id) / 3) % 8;
+            result.push(createPiece(null, playerIndex, type));
         }
         return result.join("");
     },
@@ -995,7 +972,6 @@ const Paiko = {
             args.substitutionComplete = true;
             const formatters = {
                 'piece': this.formatPiece,
-                'pieces': this.formatPieces
             };
             for (const iconType of Object.keys(formatters)) {
                 const icons = Object.keys(args).filter(name => name.startsWith(`${iconType}Icon`));

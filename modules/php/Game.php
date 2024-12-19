@@ -16,8 +16,6 @@ namespace Bga\Games\Paiko;
 use Bga\GameFramework\Actions\Types\IntArrayParam;
 use Bga\GameFramework\Actions\Types\IntParam;
 use Bga\GameFramework\Actions\Types\BoolParam;
-use PieceType;
-
 
 require_once(APP_GAMEMODULE_PATH . "module/table/table.game.php");
 require_once('Constants.php');
@@ -75,17 +73,20 @@ class Game extends \Table
     {
         $pieces = [];
         $hand = \PieceStatus::Reserve->value;
+        $id = 0;
         foreach ($players as $playerId => $player) {
+            $playerIndex = $this->getPlayerNoById($playerId) - 1;
             foreach (\PieceType::cases() as $type) {
                 foreach (range(0, 2) as $_) {
-                    $pieces[] = "($playerId, $type->value, $hand)";
+                    $pieces[] = "($id, $playerIndex, $type->value, $hand)";
+                    ++$id;
                 }
             }
         }
 
         $args = implode(',', $pieces);
         self::DbQuery(<<<EOF
-            INSERT INTO piece(player_id, type, status) 
+            INSERT INTO piece(id, player, type, status) 
             VALUES $args
             EOF);
     }
@@ -173,8 +174,7 @@ class Game extends \Table
             $py = (int)$piece['y'];
             $type = (int)$piece['type'];
             $angle = (int)$piece['angle'];
-            $playerId = $piece['player_id'];
-            $playerIndex = $this->getPlayerNoById($playerId) -1;
+            $playerIndex = (int)$piece['player'];
             foreach ($field[$type] as [$dx, $dy]) {
                 [$tx, $ty] = DIRECTIONS[$angle];
                 [$dx, $dy] = [
@@ -236,17 +236,17 @@ class Game extends \Table
         return $result;
     }
 
-    private function capture(string $playerId, $pieces): bool
+    private function capture(int $playerIndex, $pieces): bool
     {
-        $playerIndex = $this->getPlayerNoById($playerId) - 1;
         $captures = 0;
         $fireCaptures = 0;
 
         foreach ($pieces as $piece) {
             $x = (int)$piece['x'];
             $y = (int)$piece['y'];
-            $type = PieceType::from((int)$piece['type']);
-            $pieceIndex = $piece['player_id'] === $playerId ? $playerIndex : 1 - $playerIndex;
+            $id = (int)$piece['id'];
+            $type = \PieceType::from((int)$piece['type']);
+            $pieceIndex = (int)$piece['player'];
 
             $threats = $this->getThreat($x, $y, $pieces, true);
 
@@ -254,11 +254,10 @@ class Game extends \Table
                 if ($pieceIndex === $playerIndex) {
                     throw new \BgaVisibleSystemException('Invalid self capture');
                 }
-                $value = $x | $y << 4;
-                if ($type === PieceType::Fire) {
-                    $fireCaptures = $fireCaptures << 8 | $value;
+                if ($type === \PieceType::Fire) {
+                    $fireCaptures = $fireCaptures << 8 | $id;
                 } else {
-                    $captures = $captures << 8 | $value;
+                    $captures = $captures << 8 | $id;
                 }
             }
         }
@@ -352,27 +351,39 @@ class Game extends \Table
             $captures = $this->get(\GameGlobal::FireCaptures);
             $isFire = true;
         }
+
         if ($captures === 0) {
             $this->gamestate->nextState(\State::NEXT_TURN);
         } else {
-            $x = $captures & 0xF;
-            $y = $captures >> 4 & 0xF;
+            $id = $captures & 0xFF;
+            $updated = false;
+
+            if (!$isFire) {
+                $type = intDiv($id, 3) % 8;
+                if (count(\PieceType::COVER[$type]) > 0) {
+                    $pieces = self::getObjectListFromDB(<<<EOF
+                        SELECT * FROM piece
+                        EOF);
+                    $this->capture($this->get(\GameGlobal::LastPlayer), $pieces);
+                    $updated = true;
+                }
+            }
+
+            if (!$updated) {
+                $this->set($isFire ? \GameGlobal::FireCaptures : \GameGlobal::Captures, $captures >> 8);
+            }
 
             self::DbQuery(<<<EOF
                 DELETE FROM piece
-                WHERE x = $x AND y = $y
+                WHERE id = $id
                 EOF);
-
-            $this->set($isFire ? \GameGlobal::FireCaptures : \GameGlobal::Captures, $captures >> 8);
 
             $playerId = $this->getActivePlayerId();
             $playerIndex = 2 - $this->getPlayerNoById($playerId);
 
-            $coord = $captures & 0xFF;
-            $this->notifyAllPlayers('Capture', clienttranslate('${piecesIcon} is captured'), [
-                'x' => $x,
-                'y' => $y,
-                'piecesIcon' => "$playerIndex,coord,$coord"
+            $this->notifyAllPlayers('Capture', clienttranslate('${pieceIcon} is captured'), [
+                'id' => $id,
+                'pieceIcon' => "$playerIndex,$id"
             ]);
             $this->gamestate->nextState(\State::RESERVE);
         }
@@ -428,6 +439,8 @@ class Game extends \Table
     {
         $state = (int)$this->gamestate->state_id();
         $playerId = $this->getActivePlayerId();
+        $playerIndex = $this->getPlayerNoById($playerId) - 1;
+
         $draftCount = match ($state) {
             \State::DRAFT => $this->getDraftCount(),
             \State::RESERVE => 1,
@@ -439,8 +452,8 @@ class Game extends \Table
         $ids_str = implode(',', $ids);
 
         $playerCheck = $state === \State::RESERVE ?
-            "player_id <> $playerId" :
-            "player_id = $playerId";
+            "player <> $playerIndex" :
+            "player = $playerIndex";
 
         self::DbQuery(<<<EOF
             UPDATE piece 
@@ -458,8 +471,6 @@ class Game extends \Table
             throw new \BgaVisibleSystemException('Invalid draw');
         }
 
-        $playerIndex = $this->getPlayerNoById($playerId) - 1;
-
         if ($state === \State::RESERVE) {
             $playerIndex = 1 - $playerIndex;
         } else {
@@ -468,12 +479,12 @@ class Game extends \Table
 
         $message = $state === \State::RESERVE ?
             clienttranslate('${player_name} chooses  ${piecesIcon} for the opponent to draw from reserve') :
-            clienttranslate('${player_name} draws ${piecesIcon} from reserve');
+            clienttranslate('${player_name} draws ${pieceIcons} from reserve');
         $this->notifyAllPlayers('Draft', $message, [
             'player_name' => $this->getPlayerNameById($playerId),
             'playerIndex' => $playerIndex,
             'pieceIds' => $ids,
-            'piecesIcon' => "$playerIndex,id,$ids_str"
+            'pieceIcons' => "$playerIndex,$ids_str"
         ]);
 
         $this->gamestate->nextState(match ($state) {
@@ -486,6 +497,7 @@ class Game extends \Table
     }
 
     public function actDeploy(
+        #[IntParam] int $id,
         #[IntParam(min: 0, max:7)] int $type,
         #[IntParam(min: 0, max:13)] int $x,
         #[IntParam(min: 0, max:13)] int $y,
@@ -510,7 +522,7 @@ class Game extends \Table
             \PieceType::Sai => 0,
             \PieceType::Sword,
             \PieceType::Water => 1,
-            PieceType::Bow => 4,
+            \PieceType::Bow => 4,
             default => 2
         };
 
@@ -540,8 +552,8 @@ class Game extends \Table
         self::DbQuery(<<<EOF
             UPDATE piece 
             SET x = $x, y = $y, angle = $angle, status = $board
-            WHERE player_id = $playerId AND $handCheck
-             AND type = $type
+            WHERE id = $id AND type = $type
+              AND player = $playerIndex AND $handCheck
             LIMIT 1
             EOF);
 
@@ -549,28 +561,29 @@ class Game extends \Table
             throw new \BgaVisibleSystemException('Invalid deploy');
         }
 
-        $score = $piece !== PieceType::Lotus ? $this->getBasePoints($playerIndex, $this->getBase($x, $y)) : 0;
+        $score = $piece !== \PieceType::Lotus ? $this->getBasePoints($playerIndex, $this->getBase($x, $y)) : 0;
         if ($score !== 0) {
             $this->postInc(\GameGlobal::Score, $score << 8 * $playerIndex);
         }
 
-        $this->notifyAllPlayers('Deploy', clienttranslate('${player_name} deploys ${pieceIcon}'), [
+        $this->notifyAllPlayers('Move', clienttranslate('${player_name} deploys ${pieceIcon}'), [
             'player_name' => $this->getPlayerNameById($playerId),
             'playerId' => $playerId,
-            'type' => $type,
+            'id' => $id,
             'x' => $x,
             'y' => $y,
             'angle' => $angle,
             'score' => $score,
-            'pieceIcon' => "$playerIndex,$type"
+            'pieceIcon' => "$playerIndex,$id"
         ]);
 
         $pieces[] = [
+            'id' => $id,
             'x' => $x,
             'y' => $y,
             'type' => $piece->value,
             'angle' => $angle,
-            'player_id' => $playerId
+            'player' => $playerIndex
         ];
 
         $this->set(\GameGlobal::LastPlayer, $playerIndex);
@@ -578,7 +591,7 @@ class Game extends \Table
         if ($piece === \PieceType::Sai) {
             $this->set(\GameGlobal::SaiCoords, $x | $y << 8);
             $this->gamestate->nextState(\State::SAI_MOVE);
-        } elseif ($this->capture($playerId, $pieces)) {
+        } elseif ($this->capture($playerIndex, $pieces)) {
             $this->gamestate->nextState(\State::CAPTURE);
         } else {
             $this->gamestate->nextState(\State::NEXT_TURN);
@@ -595,6 +608,7 @@ class Game extends \Table
     }
 
     public function actMove(
+        #[IntParam] int $id,
         #[IntParam(min: 0, max:7)] int $type,
         #[IntParam(min: 0, max:13)] int $x,
         #[IntParam(min: 0, max:13)] int $y,
@@ -647,8 +661,9 @@ class Game extends \Table
         self::DbQuery(<<<EOF
             UPDATE piece
             SET x = $toX, y = $toY, angle = $angle
-            WHERE x = $x AND y = $y AND type = $type
-             AND player_id = $playerId
+            WHERE id = $id AND type = $type
+             AND x = $x AND y = $y
+             AND player = $playerIndex
             EOF);
 
         if (self::DbAffectedRow() === 0) {
@@ -668,56 +683,30 @@ class Game extends \Table
         $this->notifyAllPlayers('Move', clienttranslate('${player_name} moves ${pieceIcon}'), [
             'player_name' => $this->getPlayerNameById($playerId),
             'playerId' => $playerId,
-            'from' => [$x, $y],
-            'to' => [$toX, $toY],
+            'id' => $id,
+            'x' => $toX,
+            'y' => $toY,
             'angle' => [$angle],
             'score' => $score,
-            'pieceIcon' => "$playerIndex,$type"
+            'pieceIcon' => "$playerIndex,$id"
         ]);
 
         $this->set(\GameGlobal::LastPlayer, $playerIndex);
 
         $pieces[] = [
+            'id' => $id,
             'x' => $toX,
             'y' => $toY,
             'type' => $type,
             'angle' => $angle,
-            'player_id' => $playerId
+            'player' => $playerIndex
         ];
 
-        if ($this->capture($playerId, $pieces)) {
+        if ($this->capture($playerIndex, $pieces)) {
             $this->gamestate->nextState(\State::CAPTURE);
         } else {
             $this->gamestate->nextState(\State::NEXT_TURN);
         }
-
-        $this->commitGlobals();
-    }
-
-    public function actReserve(
-        #[IntParam(min: 0, max: 7)] int $type)
-    {
-        $playerId = $this->getActivePlayerId();
-        $playerIndex = $this->getPlayerNoById($playerId) - 1;
-
-        $reserve = \PieceStatus::Reserve->value;
-        $hand = \PieceStatus::Hand->value;
-        self::DbQuery(<<<EOF
-            UPDATE piece
-            SET status = $hand
-            WHERE status = $reserve
-            LIMIT 1
-        EOF);
-
-        $opponentIndex = 1 - $playerIndex;
-        $this->notifyAllPlayers('Draft', clienttranslate('${player_name} selects ${pieceIcon} from reserve'), [
-            'player_name' => $this->getPlayerNameById($playerId),
-            'playerIndex' => $opponentIndex,
-            'pieceType' => $type,
-            'pieceIcon' => "$opponentIndex,$type"
-        ]);
-
-        $this->gamestate->nextState(\State::CAPTURE);
 
         $this->commitGlobals();
     }
@@ -733,15 +722,10 @@ class Game extends \Table
         $stateName = $state['name'];
 
         if ($state['type'] === \FsmType::SINGLE_PLAYER) {
-            switch ($stateName) {
-                default:
-                {
-                    $this->gamestate->nextState('');
-                    break;
-                }
-            }
-        } elseif ($state['type'] === \FsmType::MULTIPLE_PLAYERS) {
-            $this->gamestate->setPlayerNonMultiactive($player, '');
+            $playerId = $this->getActivePlayerId();
+            $playerIndex = $this->getPlayerNoById($playerId) - 1;
+            $this->set(\GameGlobal::LastPlayer, $playerIndex);
+            $this->gamestate->jumpToState(\State::NEXT_TURN);
         } else {
             throw new \feException("Zombie mode not supported at this game state: \"$stateName\".");
         }
@@ -756,10 +740,10 @@ class Game extends \Table
 
     public function reset()
     {
-        $hand = \PieceStatus::Hand->value;
+        $reserve = \PieceStatus::Reserve->value;
         self::DbQuery(<<<EOF
             UPDATE piece 
-            SET x = NULL, y = NULL, angle = 0, status = $hand
+            SET x = NULL, y = NULL, angle = 0, status = $reserve
             WHERE 1
             EOF);
         $this->gamestate->jumpToState(\State::ACTION);
@@ -773,19 +757,6 @@ class Game extends \Table
             $result[] = "$id = $value";
         }
         $this->notifyAllPlayers('message', implode(", ", $result), []);
-    }
-
-    public function prp()
-    {
-        $pieces = self::getObjectListFromDB(
-            "SELECT * FROM piece");
-        $args = [];
-        foreach ($pieces as $piece) {
-            $type = \PieceType::from((int)$piece['type'])->getName();
-            $args[] = !isset($piece['x']) ?
-                "$type: hand" : "$type: $piece[x],$piece[y],$piece[angle]";
-        }
-        $this->notifyAllPlayers('message', implode('; ', $args), []);
     }
 
     public function dt()
