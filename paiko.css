@@ -30,7 +30,7 @@
 }
 
 .pk-reserve {
-    grid-column: calc(16 - var(--column));
+    grid-column: calc(18 - var(--column));
     transition:
         opacity 180ms ease-in,
         filter 180ms ease-in;
@@ -43,24 +43,24 @@
 
 .pk-hand:not(.invert)[data-player="1"],
 .pk-hand.invert[data-player="0"] {
-    grid-row: calc(16 - var(--row));
-    grid-column: calc(16 - var(--column));
+    grid-row: calc(18 - var(--row));
+    grid-column: calc(18 - var(--column));
 }
 
 .pk-reserve:not(.invert)[data-player="1"],
 .pk-reserve.invert[data-player="0"] {
-    grid-row: calc(16 - var(--row));
+    grid-row: calc(18 - var(--row));
     grid-column: var(--column);
 }
 
-.pk-hand[data-type="0"], .pk-reserve[data-type="0"] { --row: 13; --column: 1; }
-.pk-hand[data-type="1"], .pk-reserve[data-type="1"] { --row: 13; --column: 2; }
-.pk-hand[data-type="2"], .pk-reserve[data-type="2"] { --row: 14; --column: 1; }
-.pk-hand[data-type="3"], .pk-reserve[data-type="3"] { --row: 14; --column: 2; }
-.pk-hand[data-type="4"], .pk-reserve[data-type="4"] { --row: 14; --column: 3; }
-.pk-hand[data-type="5"], .pk-reserve[data-type="5"] { --row: 15; --column: 1; }
-.pk-hand[data-type="6"], .pk-reserve[data-type="6"] { --row: 15; --column: 2; }
-.pk-hand[data-type="7"], .pk-reserve[data-type="7"] { --row: 15; --column: 3; }
+.pk-hand[data-type="0"], .pk-reserve[data-type="0"] { --row: 14; --column: 2; }
+.pk-hand[data-type="1"], .pk-reserve[data-type="1"] { --row: 14; --column: 3; }
+.pk-hand[data-type="2"], .pk-reserve[data-type="2"] { --row: 15; --column: 2; }
+.pk-hand[data-type="3"], .pk-reserve[data-type="3"] { --row: 15; --column: 3; }
+.pk-hand[data-type="4"], .pk-reserve[data-type="4"] { --row: 15; --column: 4; }
+.pk-hand[data-type="5"], .pk-reserve[data-type="5"] { --row: 16; --column: 2; }
+.pk-hand[data-type="6"], .pk-reserve[data-type="6"] { --row: 16; --column: 3; }
+.pk-hand[data-type="7"], .pk-reserve[data-type="7"] { --row: 16; --column: 4; }
 
 .pk-hand .pk-piece, .pk-reserve .pk-piece {
     width: 100%;
@@ -78,7 +78,7 @@
 }
 
 #pk-board {
-    --board-size: 700px;
+    --board-size: 740px;
     position: relative;
     flex-shrink: 0;
     width: var(--board-size);
@@ -119,15 +119,12 @@
 }
 
 #pk-board-spaces {
-    --padding: 7px;
     position: absolute;
-    width: calc(100% - var(--padding) * 2);
-    height: calc(100% - var(--padding) * 2);
+    width: 100%;
+    height: 100%;
     display: grid;
-    grid-template-columns: repeat(7, 1fr) 0.24fr repeat(7, 1fr);
-    grid-template-rows: repeat(7, 1fr) 0.24fr repeat(7, 1fr);
-    left: var(--padding);
-    top: var(--padding);
+    grid-template-columns: 0.18fr repeat(7, 1fr) 0.3fr repeat(7, 1fr) 0.14fr;
+    grid-template-rows: 0.18fr repeat(7, 1fr) 0.27fr repeat(7, 1fr) 0.17fr;
 }
 
 .pk-board-space, .pk-board-hole {

@@ -172,11 +172,11 @@ function createBoard(playerIndex) {
             const className = isHole ?
                 "pk-board-hole" : "pk-board-space";
 
-            let column = x < 7 ? x + 1 : x + 2;
-            let row = y < 7 ? y + 1 : y + 2;
+            let column = x < 7 ? x + 2 : x + 3;
+            let row = y < 7 ? y + 2 : y + 3;
             if (playerIndex) {
-                column = 16 - column;
-                row = 16 - row;
+                column = 18 - column;
+                row = 18 - row;
             }
             const side =
                 x < 7 && y > 6 ? 1 :
