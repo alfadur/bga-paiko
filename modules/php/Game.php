@@ -405,19 +405,21 @@ class Game extends \Table
             $y = (int)$item['y'];
             $type = (int)$item['type'];
 
-            if (count(\PieceType::COVER[$type]) > 0) {
-                $pieces = self::getObjectListFromDB(<<<EOF
-                        SELECT * FROM piece
-                        EOF);
-                $this->capture($this->get(\GameGlobal::LastPlayer), $pieces);
-            } else {
-                $this->set($isFire ? \GameGlobal::FireCaptures : \GameGlobal::Captures, $captures >> 8);
-            }
-
             self::DbQuery(<<<EOF
                 DELETE FROM piece
                 WHERE id = $id
                 EOF);
+
+            $this->set($isFire ? \GameGlobal::FireCaptures : \GameGlobal::Captures, $captures >> 8);
+
+            if (count(\PieceType::COVER[$type]) > 0) {
+                $board = \PieceStatus::Board->value;
+                $pieces = self::getObjectListFromDB(<<<EOF
+                        SELECT * FROM piece
+                        WHERE status = $board
+                        EOF);
+                $this->capture($this->get(\GameGlobal::LastPlayer), $pieces);
+            }
 
             $playerId = $this->getActivePlayerId();
             $playerIndex = 2 - $this->getPlayerNoById($playerId);
