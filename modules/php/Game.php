@@ -499,7 +499,7 @@ class Game extends \Table
         }
 
         $message = $state === \State::RESERVE ?
-            clienttranslate('${player_name} chooses  ${piecesIcon} for the opponent to draw from reserve') :
+            clienttranslate('${player_name} chooses  ${pieceIcons} for the opponent to draw from reserve') :
             clienttranslate('${player_name} draws ${pieceIcons} from reserve');
         $this->notifyAllPlayers('Draft', $message, [
             'player_name' => $this->getPlayerNameById($playerId),

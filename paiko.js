@@ -514,8 +514,10 @@ const Paiko = {
 
         for (const {id, moves} of data.lastMoves) {
             const piece = findPiece(id);
-            piece.classList.add("last-moved");
-            piece.dataset.moves = moves.toString();
+            if (piece) {
+                piece.classList.add("last-moved");
+                piece.dataset.moves = moves.toString();
+            }
         }
 
         this.bgaSetupPromiseNotifications({
@@ -970,9 +972,8 @@ const Paiko = {
         await Promise.all(highlights);
     },
 
-    async onNotificationCapture({x, y}) {
-        const piece = (findSpace(x, y) || findHole(x, y)).querySelector(".pk-piece");
-        piece.remove();
+    async onNotificationCapture({id}) {
+        findPiece(id).remove();
     },
 
     async onNotificationDraft({playerIndex, pieceIds}) {
