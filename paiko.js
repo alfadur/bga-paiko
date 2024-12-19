@@ -186,12 +186,13 @@ function createBoard(playerIndex) {
             spaces.push(`<div id="${className}-${x}-${y}" class="${className}"
                 data-x="${x}" data-y="${y}" data-side="${side}" 
                 style="--column: ${column}; --row: ${row};"></div>`);
-
-            if (playerIndex) {
-                spaces.reverse();
-            }
         }
     }
+
+    if (playerIndex) {
+        spaces.reverse();
+    }
+
     return `<div id="pk-board">
         <div id="pk-board-shadow-container">
             <div id="pk-board-shadow"></div>

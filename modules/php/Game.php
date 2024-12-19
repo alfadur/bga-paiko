@@ -119,7 +119,7 @@ class Game extends \Table
             $lastPiece = $lastPieces >> 16 * $playerIndex & 0xFFFF;
             $id = $lastPiece & 0xFF;
             if ($id !== 0) {
-                $lastMoves[$playerIndex] = [
+                $lastMoves[] = [
                     'id' => $id - 1,
                     'moves' => $lastPiece >> 8
                 ];
@@ -322,6 +322,26 @@ class Game extends \Table
         return false;
     }
 
+    private function checkTie(): bool
+    {
+        $scores = $this->get(\GameGlobal::Score);
+        $scores = [$scores & 0xFF, $scores >> 8];
+        $captures = $this->get(\GameGlobal::CapturedPieces);
+        $captures = [$captures & 0xFF, $captures >> 8];
+
+        if ($captures[0] >= 13 && $captures[1] >= 13
+            && $scores[0] <= 5 && $scores[1] <= 5)
+        {
+            self::DbQuery(<<<EOF
+                        UPDATE player 
+                        SET player_score = 1
+                        WHERE 1
+                        EOF);
+            return true;
+        }
+        return false;
+    }
+
     private function switchPlayer(): void
     {
         $playerId = $this->getActivePlayerId();
@@ -351,7 +371,7 @@ class Game extends \Table
 
     public function stNextTurn(): void
     {
-        if ($this->checkGameEnd()) {
+        if ($this->checkGameEnd() || $this->checkTie()) {
             $this->gamestate->nextState(\State::GAME_END);
         } else {
             $this->switchPlayer();
@@ -403,11 +423,13 @@ class Game extends \Table
             $playerIndex = 2 - $this->getPlayerNoById($playerId);
 
             $score = $type !== \PieceType::Lotus->value ?
-                - $this->getBasePoints(1 - $playerIndex, $this->getBase($x, $y)) :
+                - $this->getBasePoints($playerIndex, $this->getBase($x, $y)) :
                 0;
             if ($score !== 0) {
-                $this->postInc(\GameGlobal::Score, $score << 8 * (1 - $playerIndex));
+                $this->postInc(\GameGlobal::Score, $score << 8 * $playerIndex);
             }
+
+            $this->postInc(\GameGlobal::CapturedPieces, 1 << $playerIndex * 8);
 
             $this->notifyAllPlayers('Capture', clienttranslate('${pieceIcon} is captured'), [
                 'playerIndex' => (1 - $playerIndex),
@@ -415,7 +437,18 @@ class Game extends \Table
                 'score' => $score,
                 'pieceIcon' => "$playerIndex,$id"
             ]);
-            $this->gamestate->nextState(\State::RESERVE);
+
+            $reserve = \PieceStatus::Reserve->value;
+            $reservePieces = (int)self::getUniqueValueFromDB(<<<EOF
+                SELECT COUNT(*)
+                FROM piece
+                WHERE player = $playerIndex AND status = $reserve
+                EOF);
+            if ($reservePieces === 0) {
+                $this->gamestate->nextState(\State::CAPTURE);
+            } else {
+                $this->gamestate->nextState(\State::RESERVE);
+            }
         }
     }
 

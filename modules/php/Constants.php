@@ -39,6 +39,7 @@ enum GameGlobal: string {
     case LastPiece = 'last_piece';
     case Score = 'score';
     case LastPlayer = 'last_player';
+    case CapturedPieces = 'captured_pieces';
 
     final const IDS = [
         self::SaiId->value => 10,
@@ -46,7 +47,8 @@ enum GameGlobal: string {
         self::FireCaptures->value => 12,
         self::LastPiece->value => 13,
         self::Score->value => 14,
-        self::LastPlayer->value => 15
+        self::LastPlayer->value => 15,
+        self::CapturedPieces->value => 16,
     ];
 }
 
