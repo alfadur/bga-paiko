@@ -229,6 +229,10 @@ function findSelectedPiece() {
     return document.querySelector(".pk-piece.pk-selected");
 }
 
+function findLastMovedPiece(playerIndex) {
+    return document.querySelector(`.pk-piece.last-moved[data-player="${playerIndex}"]`);
+}
+
 function findHole(x, y) {
     return document.getElementById(`pk-board-hole-${x}-${y}`);
 }
@@ -506,6 +510,12 @@ const Paiko = {
             if (parseInt(status) === PieceStatus.board) {
                 this.addPiece(id, findSpace(x, y) || findHole(x, y), parseInt(player), type, parseInt(angle));
             }
+        }
+
+        for (const {id, moves} of data.lastMoves) {
+            const piece = findPiece(id);
+            piece.classList.add("last-moved");
+            piece.dataset.moves = moves.toString();
         }
 
         this.bgaSetupPromiseNotifications({
@@ -920,11 +930,26 @@ const Paiko = {
         }
     },
 
-    async onNotificationMove({playerId, id, x, y, angle, score, isDeploy}) {
+    async onNotificationMove({playerId, id, x, y, angle, score, isMove}) {
+        const playerIndex = this.gamedatas.players[playerId].index;
         const piece = findPiece(id);
         this.cancelOtherActions(piece);
         clearTag("pk-selected");
         clearTag("pk-selectable");
+
+        const lastPiece = findLastMovedPiece(playerIndex);
+        if (lastPiece) {
+            if (isMove && lastPiece === piece) {
+                lastPiece.dataset.moves = parseInt(lastPiece.dataset.moves) + 1;
+            } else {
+                lastPiece.classList.remove("last-moved");
+            }
+        }
+
+        if (isMove && piece !== lastPiece) {
+            piece.classList.add("last-moved");
+            piece.dataset.moves = "1";
+        }
 
         const space = findSpace(x, y) || findHole(x, y);
         if (piece.parentElement !== space || getStyle(piece, {angle: null}.angle !== angle)) {
@@ -951,6 +976,11 @@ const Paiko = {
     },
 
     async onNotificationDraft({playerIndex, pieceIds}) {
+        const lastPiece = findLastMovedPiece(playerIndex);
+        if (lastPiece) {
+            lastPiece.classList.remove("last-moved");
+        }
+
         for (const id of pieceIds) {
             const piece = document.getElementById(`pk-piece-${id}`);
             const hand = findHand(playerIndex, piece.dataset.type);

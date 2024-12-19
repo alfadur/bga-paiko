@@ -176,6 +176,8 @@
     position: relative;
     width: 100%;
     height: 100%;
+
+    transition: opacity 200ms ease-out;
 }
 
 .roundedbox .pk-piece {
@@ -188,8 +190,21 @@
     pointer-events: none;
 }
 
+.pk-piece.last-moved {
+    outline: 2px solid #df8819;
+}
+
+.pk-piece.pk-selected {
+    outline: 2px solid yellow;
+}
+
 .pk-piece.pk-selected, .pk-piece.pk-selectable:hover {
     filter: contrast(2);
+}
+
+.pk-piece.last-moved[data-moves="3"] {
+    opacity: 0.7;
+    pointer-events: none !important;
 }
 
 .pk-piece * {
@@ -235,8 +250,4 @@
 
 #pk-container[data-player="1"] .pk-piece .pk-piece-image {
     transform: rotate(calc(var(--angle) * 90deg + 180deg));
-}
-
-.pk-piece.pk-selected {
-    outline: 1px solid yellow;
 }

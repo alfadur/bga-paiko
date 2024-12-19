@@ -46,7 +46,7 @@ enum GameGlobal: string {
         self::FireCaptures->value => 12,
         self::LastPiece->value => 13,
         self::Score->value => 14,
-        self::LastPlayer->value => 15,
+        self::LastPlayer->value => 15
     ];
 }
 

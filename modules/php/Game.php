@@ -113,6 +113,20 @@ class Game extends \Table
         $result['pieces'] = self::getObjectListFromDB(
             "SELECT * FROM piece");
 
+        $lastPieces = $this->get(\GameGlobal::LastPiece);
+        $lastMoves = [];
+        foreach (range(0, 1) as $playerIndex) {
+            $lastPiece = $lastPieces >> 16 * $playerIndex & 0xFFFF;
+            $id = $lastPiece & 0xFF;
+            if ($id !== 0) {
+                $lastMoves[$playerIndex] = [
+                    'id' => $id - 1,
+                    'moves' => $lastPiece >> 8
+                ];
+            }
+        }
+        $result['lastMoves'] = $lastMoves;
+
         return $result;
     }
 
@@ -273,18 +287,23 @@ class Game extends \Table
         return $captures || $fireCaptures;
     }
 
-    public function findBitsIndex(int $bits, int $x, int $y): ?int
+    private function updateLastPiece(int $playerIndex, int $id, bool $reset)
     {
-        $value = $x | $y << 4;
-        for ($index = 0; $index < 8; ++$index) {
-            $storedValue = $bits >> $index * 8 & 0xFF;
-            if ($storedValue === $value) {
-                return $index;
-            } else if (!$storedValue) {
-                break;
+        $lastPieces = $this->get(\GameGlobal::LastPiece);
+        $lastPiece = $lastPieces >> $playerIndex * 16 & 0xFFFF;
+
+        if (!$reset && ($lastPiece & 0xFF) === $id + 1) {
+            if ($lastPiece >> 8 >= 3) {
+                throw new \BgaVisibleSystemException('Repeated piece');
+            }
+            $lastPieces += 1 << (8 + $playerIndex * 16);
+        } else {
+            $lastPieces &= ~(0xFFFF << $playerIndex * 16);
+            if (!$reset) {
+                $lastPieces |= (1 << 8 | $id + 1) << $playerIndex * 16;
             }
         }
-        return null;
+        $this->set(\GameGlobal::LastPiece, $lastPieces);
     }
 
     private function checkGameEnd(): bool
@@ -441,6 +460,8 @@ class Game extends \Table
         $playerId = $this->getActivePlayerId();
         $playerIndex = $this->getPlayerNoById($playerId) - 1;
 
+        $this->updateLastPiece($playerIndex, 0, true);
+
         $draftCount = match ($state) {
             \State::DRAFT => $this->getDraftCount(),
             \State::RESERVE => 1,
@@ -517,6 +538,8 @@ class Game extends \Table
         $playerId = $this->getActivePlayerId();
         $playerIndex = $this->getPlayerNoById($playerId) - 1;
 
+        $this->updateLastPiece($playerIndex, $id, !$waterRedeploy);
+
         $range = match ($piece) {
             \PieceType::Lotus,
             \PieceType::Sai => 0,
@@ -566,7 +589,11 @@ class Game extends \Table
             $this->postInc(\GameGlobal::Score, $score << 8 * $playerIndex);
         }
 
-        $this->notifyAllPlayers('Move', clienttranslate('${player_name} deploys ${pieceIcon}'), [
+        $message = $waterRedeploy ?
+            clienttranslate('${player_name} redeploys ${pieceIcon}') :
+            clienttranslate('${player_name} deploys ${pieceIcon}');
+
+        $this->notifyAllPlayers('Move', $message, [
             'player_name' => $this->getPlayerNameById($playerId),
             'playerId' => $playerId,
             'id' => $id,
@@ -574,6 +601,7 @@ class Game extends \Table
             'y' => $y,
             'angle' => $angle,
             'score' => $score,
+            'isMove' => $waterRedeploy,
             'pieceIcon' => "$playerIndex,$id"
         ]);
 
@@ -635,6 +663,8 @@ class Game extends \Table
         $playerId = $this->getActivePlayerId();
         $playerIndex = $this->getPlayerNoById($playerId) - 1;
 
+        $this->updateLastPiece($playerIndex, $id, false);
+
         $pieces = null;
         [$toX, $toY] = [$x, $y];
         foreach ($steps as $step) {
@@ -688,6 +718,7 @@ class Game extends \Table
             'y' => $toY,
             'angle' => [$angle],
             'score' => $score,
+            'isMove' => true,
             'pieceIcon' => "$playerIndex,$id"
         ]);
 
