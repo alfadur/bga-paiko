@@ -417,25 +417,32 @@ class Game extends \Table
     public function actDraft(
         #[IntArrayParam] array $ids): void
     {
+        $state = (int)$this->gamestate->state_id();
+        $playerId = $this->getActivePlayerId();
+        $draftCount = $state === \State::ACTION ? 3 : $this->getDraftCount();
+
         $hand = \PieceStatus::Hand->value;
         $reserve = \PieceStatus::Reserve->value;
         $ids_str = implode(',', $ids);
-        $playerId = $this->getActivePlayerId();
+
+        $playerCheck = $state === \State::RESERVE ?
+            "player_id <> $playerId" :
+            "player_id = $playerId";
+
         self::DbQuery(<<<EOF
             UPDATE piece 
             SET status = $hand
             WHERE id IN ($ids_str) 
               AND status = $reserve
-              AND player_id = $playerId
+              AND $playerCheck
         EOF);
 
-        $state = (int)$this->gamestate->state_id();
         $correctCount = $state === \State::ACTION ?
-            self::DbAffectedRow() <= 3 :
-            self::DbAffectedRow() === $this->getDraftCount();
+            self::DbAffectedRow() <= $draftCount :
+            self::DbAffectedRow() === $draftCount;
 
         if (!$correctCount) {
-            throw new \BgaVisibleSystemException('Invalid draft tiles');
+            throw new \BgaVisibleSystemException('Invalid draft');
         }
 
         $playerIndex = $this->getPlayerNoById($playerId) - 1;

@@ -91,8 +91,8 @@ $machinestates = [
     State::ACTION => [
         Fsm::NAME => 'action',
         Fsm::TYPE => FsmType::SINGLE_PLAYER,
-        Fsm::DESCRIPTION => clienttranslate('${actplayer} must perform an action'),
-        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must perform an action'),
+        Fsm::DESCRIPTION => clienttranslate('${actplayer} must take an action'),
+        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must shift or deploy a tile'),
         Fsm::POSSIBLE_ACTIONS => [
             'actDeploy',
             'actMove',
@@ -135,8 +135,8 @@ $machinestates = [
     State::RESERVE => [
         Fsm::NAME => 'reserve',
         Fsm::TYPE => FsmType::SINGLE_PLAYER,
-        Fsm::DESCRIPTION => clienttranslate('${actplayer} must choose a piece from the opponents reserve'),
-        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must choose a piece from the opponents reserve'),
+        Fsm::DESCRIPTION => clienttranslate('${actplayer} must choose a tile from the opponents reserve'),
+        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must choose a tile from reserve for the opponent to draft'),
         Fsm::POSSIBLE_ACTIONS => [
             'actReserve'
         ],

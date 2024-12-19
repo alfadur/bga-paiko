@@ -14,7 +14,7 @@ const State = {
     draft: "draft",
     action: "action",
     saiMove: "saiMove",
-    capture: "capture",
+    reserve: "capture",
     clientDraft: "clientDraft",
     clientDeploy: "clientDeploy",
     clientMove: "clientMove",
@@ -27,7 +27,6 @@ const Action = {
     move: "actMove",
     deploy: "actDeploy",
     skip: "actSkip",
-    capture: "capture",
     clientMove: "actClientMove",
 };
 Object.freeze(Action);
@@ -217,6 +216,10 @@ function findSpace(x, y) {
     return document.getElementById(`pk-board-space-${x}-${y}`);
 }
 
+function findSelectedPiece() {
+    return document.querySelector(".pk-piece.pk-selected");
+}
+
 function findHole(x, y) {
     return document.getElementById(`pk-board-hole-${x}-${y}`);
 }
@@ -227,33 +230,6 @@ function findHand(playerIndex, type) {
 
 function findReserve(playerIndex, type) {
     return document.getElementById(`pk-reserve-${playerIndex}-${type}`)
-}
-
-function getPath(fromX, fromY, toX, toY, orthogonal = false) {
-    const path = [];
-    while (toX > fromX) {
-        ++fromX;
-        path.push(1);
-    }
-    while (toX < fromX) {
-        --fromX;
-        path.push(3)
-    }
-
-    if (orthogonal && path.length > 0 && toY !== fromY) {
-        return null;
-    }
-
-    while (toY > fromY) {
-        ++fromY;
-        path.push(2);
-    }
-    while (toY < fromY) {
-        --fromY;
-        path.push(0)
-    }
-
-    return path;
 }
 
 function getLocalCoords(x, y, angle) {
@@ -516,9 +492,9 @@ const Paiko = {
             });
         }
 
-        for (const {player_id: playerId, x, y, type, angle, status} of data.pieces) {
+        for (const {player_id: playerId, id, x, y, type, angle, status} of data.pieces) {
             if (x !== null) {
-                this.addPiece(piece.id, findSpace(x, y), players[playerId].index, type, parseInt(angle));
+                this.addPiece(id, findSpace(x, y), players[playerId].index, type, parseInt(angle));
             }
         }
 
@@ -530,16 +506,26 @@ const Paiko = {
         console.log("Ending game setup");
     },
 
+    addPiece(id, parent, playerIndex, type, angle = 0) {
+        const piece = createElement(parent, createPiece(id, playerIndex, type, angle));
+        piece.addEventListener("mousedown", event => {
+            event.stopPropagation();
+            this.onPieceClick(piece);
+        })
+    },
+
     onEnteringState(stateName, state) {
         console.log(`Entering state: ${stateName}`);
 
         if (this.isCurrentPlayerActive()) {
             switch (stateName) {
                 case State.draft:
+                case State.reserve:
                 case State.clientDraft: {
                     clearTag("pk-selectable");
                     clearTag("pk-selected");
-                    const pieces = document.querySelectorAll(`.pk-reserve .pk-piece[data-player="${this.playerIndex}"]`);
+                    const index = stateName === State.reserve ? 1 - this.playerIndex : this.playerIndex
+                    const pieces = document.querySelectorAll(`.pk-reserve .pk-piece[data-player="${index}"]`);
                     for (const piece of pieces) {
                         piece.classList.add("pk-selectable");
                     }
@@ -559,10 +545,11 @@ const Paiko = {
                     clearTag("pk-selectable");
                     const piece = findSpace(state.args.x, state.args.y)
                         .querySelector(".pk-piece");
-                    piece.classList.add("pk-selected");
+                    piece.classList.add("pk-selectable", "pk-selected");
                     this.setClientState(State.clientMove, {
-                        descriptionmyturn: "${you} must move ${pieceIcon}",
+                        descriptionmyturn: "${you} must shift ${pieceIcon}",
                         args: {
+                            sourceSpace: piece.parentElement,
                             selectedPiece: piece,
                             pieceIcon: `${this.playerIndex},${piece.dataset.type}`,
                             canSkip: true
@@ -623,14 +610,6 @@ const Paiko = {
         }
     },
 
-    addPiece(id, parent, playerIndex, type, angle = 0) {
-        const piece = createElement(parent, createPiece(id, playerIndex, type, angle));
-        piece.addEventListener("mousedown", event => {
-            event.stopPropagation();
-            this.onPieceClick(piece);
-        })
-    },
-
     onLeavingState(stateName) {
         console.log(`Leaving state: ${stateName}`);
 
@@ -685,45 +664,23 @@ const Paiko = {
                     break;
                 }
                 case State.clientConfirm: {
-                    this.addActionButton("pk-confirm-button", _("Confirm"), () => {
-                        const {selectedPiece, sourceSpace, targetSpace} = args;
-                        const type = parseInt(selectedPiece.dataset.type);
-                        const x = parseInt(targetSpace.dataset.x);
-                        const y = parseInt(targetSpace.dataset.y);
-                        const path = this.paths.filter(({space}) => space.x === x && space.y === y)[0];
-
-                        if (!path) {
-                            this.bgaPerformAction(Action.deploy, {
-                                x: targetSpace.dataset.x,
-                                y: targetSpace.dataset.y,
-                                type: selectedPiece.dataset.type,
-                                waterRedeploy: true,
-                                angle: getStyle(selectedPiece, {angle: null}).angle
-                            })
-                        } else {
-                            this.bgaPerformAction(Action.move, {
-                                x: sourceSpace.dataset.x,
-                                y: sourceSpace.dataset.y,
-                                steps: getPath(
-                                    parseInt(sourceSpace.dataset.x),
-                                    parseInt(sourceSpace.dataset.y),
-                                    parseInt(targetSpace.dataset.x),
-                                    parseInt(targetSpace.dataset.y))
-                                    .join(","),
-                                type: selectedPiece.dataset.type,
-                                angle: intMod(getStyle(selectedPiece, {angle: null}).angle, 4)
-                            });
-
-                        }
-                    });
+                    this.addActionButton("pk-confirm-button", _("Confirm"), () => this.confirmAction(stateName, args));
                     break;
                 }
             }
 
+            const cancellableStates = [
+                State.clientDraft,
+                State.clientDeploy,
+                //State.clientMove,
+                State.clientConfirm];
+            if (cancellableStates.indexOf(stateName) >= 0) {
+                this.addActionButton("pk-cancel", _("Cancel"), () => this.cancelAction(stateName, args), null, null, "gray");
+            }
 
-
-            if (args?.canSkip) {
+            if (args && args.canSkip) {
                 this.addActionButton("pk-skip", _("Skip"), () => {
+                    this.cancelAction(stateName, args);
                     this.bgaPerformAction(Action.skip);
                 }, null, null, "red");
             }
@@ -731,6 +688,64 @@ const Paiko = {
             switch (stateName) {
 
             }
+        }
+    },
+
+    async cancelAction(stateName, args) {
+        debugger;
+        if (stateName === State.clientDraft) {
+            const drafted = document.querySelectorAll(".pk-hand .pk-piece.pk-selectable");
+            for (const piece of drafted) {
+                this.animateMovePiece(piece, findReserve(this.playerIndex, piece.dataset.type));
+                await this.wait(120);
+            }
+        } else if (stateName === State.clientMove) {
+            this.animateMovePiece(piece, args.sourceSpace);
+        } else if (stateName === State.clientConfirm) {
+            const piece = findSelectedPiece();
+            piece.classList.remove("pk-selected");
+            if (this.checkAction(Action.move, true)) {
+                this.animateMovePiece(piece, args.sourceSpace, args.angle);
+            } else if (this.checkAction(Action.deploy, true)) {
+                this.animateMovePiece(piece, findHand(this.playerIndex, piece.dataset.type), args.angle);
+            }
+        }
+        this.restoreServerGameState()
+    },
+
+    confirmAction(stateName, args) {
+        const {selectedPiece, targetSpace} = args
+        if (this.checkAction(Action.move, true)) {
+            const {sourceSpace} = args;
+            const type = parseInt(selectedPiece.dataset.type);
+            const x = parseInt(targetSpace.dataset.x);
+            const y = parseInt(targetSpace.dataset.y);
+            const path = this.paths.filter(({space}) => space.x === x && space.y === y)[0];
+
+            if (!path) {
+                this.bgaPerformAction(Action.deploy, {
+                    x: targetSpace.dataset.x,
+                    y: targetSpace.dataset.y,
+                    type: type,
+                    waterRedeploy: true,
+                    angle: intMod(getStyle(selectedPiece, {angle: null}).angle, 4)
+                })
+            } else {
+                this.bgaPerformAction(Action.move, {
+                    x: sourceSpace.dataset.x,
+                    y: sourceSpace.dataset.y,
+                    steps: path.steps.join(","),
+                    type: type,
+                    angle: intMod(getStyle(selectedPiece, {angle: null}).angle, 4)
+                });
+            }
+        } else {
+            this.bgaPerformAction(Action.deploy, {
+                type: selectedPiece.dataset.type,
+                x: parseInt(targetSpace.dataset.x),
+                y: parseInt(targetSpace.dataset.y),
+                angle: intMod(getStyle(selectedPiece, {angle: null}).angle, 4)
+            });
         }
     },
 
@@ -753,21 +768,44 @@ const Paiko = {
         space.classList.remove("highlight");
     },
 
+    async animateMovePiece(piece, target, angle = null) {
+        const srcRect = piece.getBoundingClientRect();
+        target.appendChild(piece);
+        if (this.bgaAnimationsActive()) {
+            if (angle !== null) {
+                setStyle(piece, {angle});
+            }
+        } else {
+            if (angle !== null) {
+                setStyle(piece, {angle});
+            }
+        }
+    },
+
     onSpaceClicked(space) {
         console.log("clicked", space);
         if (space.classList.contains("pk-selectable")) {
+            const state = this.gamedatas.gamestate;
+            const piece = state.args && state.args.selectedPiece;
+
             if (this.checkAction(Action.deploy, true)) {
-                const selectedPiece = this.gamedatas.gamestate.args.selectedPiece;
-                this.bgaPerformAction(Action.deploy, {
-                    type: this.gamedatas.gamestate.args.selectedPiece.dataset.type,
-                    x: parseInt(space.dataset.x),
-                    y: parseInt(space.dataset.y),
-                    angle: getStyle(selectedPiece, {angle: null}).angle
-                });
+                this.animateMovePiece(piece, space);
+                this.setClientState(State.clientConfirm, {
+                    descriptionmyturn: _("${you} must rotate and confirm the deployment of ${pieceIcon}"),
+                    args: {
+                        selectedPiece: piece,
+                        targetSpace: space,
+                        angle: getStyle(piece, {angle: null}).angle,
+                        x: parseInt(space.dataset.x),
+                        y: parseInt(space.dataset.y),
+                        pieceIcon: `${this.playerIndex},${piece.dataset.type}`,
+                    },
+                    possibleactions: [Action.deploy]
+                })
             } else if (this.checkAction(Action.clientMove, true)) {
                 const piece = this.gamedatas.gamestate.args.selectedPiece;
                 const source = piece.parentElement;
-                space.appendChild(piece);
+                this.animateMovePiece(piece, space)
 
                 const actions = [Action.move, Action.deploy];
                 if (this.checkAction(Action.skip, true)) {
@@ -775,15 +813,16 @@ const Paiko = {
                 }
 
                 this.setClientState(State.clientConfirm, {
-                    descriptionmyturn: _("${you} must confirm move with ${pieceIcon}"),
+                    descriptionmyturn: _("${you} must rotate and confirm the shift of ${pieceIcon}"),
                     args: {
                         selectedPiece: piece,
                         sourceSpace: source,
                         targetSpace: space,
+                        angle: getStyle(piece, {angle: null}).angle,
                         x: parseInt(space.dataset.x),
                         y: parseInt(space.dataset.y),
                         pieceIcon: `${this.playerIndex},${piece.dataset.type}`,
-                        canSkip: this.gamedatas.gamestate.args?.canSkip
+                        canSkip: this.gamedatas.gamestate.args && this.gamedatas.gamestate.args.canSkip
                     },
                     possibleactions: actions
                 })
@@ -795,38 +834,48 @@ const Paiko = {
         console.log("clicked", piece);
         if (piece.classList.contains("pk-selectable")) {
             const state = this.gamedatas.gamestate;
-            const space = piece.closest(".pk-board-space, .pk-board-hole");
             const type = parseInt(piece.dataset.type);
 
             if (this.checkAction(Action.draft, true) && state.name !== State.action) {
-                const hand = findHand(this.playerIndex, type);
+                const index = state.name === State.reserve ? 1 - this.playerIndex : this.playerIndex
+                const hand = findHand(index, type);
+
                 const count = state.args.count;
                 let drafted = document.querySelectorAll(".pk-hand .pk-piece.pk-selectable").length;
+
                 if (piece.parentElement !== hand) {
                     if (drafted < count) {
                         ++drafted;
-                        hand.appendChild(piece);
+                        this.animateMovePiece(piece, hand);
+                        if (drafted === count) {
+                            this.statusBar.setTitle(
+                                _("${you} must confirm the draft"));
+                        } else {
+                            this.statusBar.setTitle(
+                                _("${you} must draft ${count} tile(s) from reserve"),
+                                {count: count - drafted});
+                        }
+                    }
+                } else {
+                    --drafted;
+                    this.animateMovePiece(piece, findReserve(this.playerIndex, type));
+                    if (state.name === State.reserve) {
+                        this.statusBar.setTitle(
+                            _("${you} must choose a piece from reserve for the opponent to draft"),
+                            {count: count - drafted});
+
+                    } else {
                         this.statusBar.setTitle(
                             _("${you} must draft ${count} tile(s) from reserve"),
                             {count: count - drafted});
                     }
-                } else {
-                    --drafted;
-                    findReserve(this.playerIndex, type).appendChild(piece);
-                    this.statusBar.setTitle(
-                        _("${you} must draft ${count} tile(s) from reserve"),
-                        {count: count - drafted});
                 }
 
                 const remaining = document.querySelectorAll(".pk-reserve .pk-piece.pk-selectable").length;
 
                 document.getElementById("pk-confirm-button").classList.toggle("disabled", remaining !== 0 && drafted !== count);
-            } else if (this.checkAction(Action.capture, true)) {
-                this.bgaPerformAction(Action.capture, {
-                    x: parseInt(space.dataset.x),
-                    y: parseInt(space.dataset.y)
-                })
             } else if (piece.closest(".pk-board-space, .pk-board-hole") === null) {
+                this.cancelAction(state.name, state.args);
                 this.setClientState(State.clientDeploy, {
                     descriptionmyturn: _("${you} must select the space to deploy ${pieceIcon}"),
                     args: {
@@ -836,16 +885,16 @@ const Paiko = {
                     possibleactions: [Action.deploy]
                 });
                 piece.classList.add("pk-selected");
-            } else if (piece.classList.contains("pk-selected")) {
-                if ([0, 2, 5].indexOf(parseInt(piece.dataset.type)) >= 0) {
-                    const {angle} = getStyle(piece, {angle: null});
-                    setStyle(piece, {angle: angle + 1});
-                }
-            } else if (state.name === State.action) {
+            } else if (piece.classList.contains("pk-selected") && state.name === State.clientConfirm) {
+                const {angle} = getStyle(piece, {angle: null});
+                setStyle(piece, {angle: angle + 1});
+            } else if ([State.action, State.clientDeploy, State.clientMove, State.clientConfirm].indexOf(state.name) >= 0) {
+                this.cancelAction(state.name, state.args);
                 clearTag("pk-selected");
                 this.setClientState(State.clientMove, {
-                    descriptionmyturn: "${you} must move ${pieceIcon}",
+                    descriptionmyturn: "${you} must shift ${pieceIcon}",
                     args: {
+                        sourceSpace: piece.parentElement,
                         selectedPiece: piece,
                         pieceIcon: `${this.playerIndex},${piece.dataset.type}`
                     },
@@ -862,8 +911,7 @@ const Paiko = {
             this.gamedatas.gamestate.args.selectedPiece :
             document.querySelector(`.pk-hand .pk-piece[data-type="${type}"][data-player="${playerIndex}"]`);
         if (piece) {
-            findSpace(x, y).appendChild(piece);
-            setStyle(piece, {angle});
+            await this.animateMovePiece(piece, findSpace(x, y), angle)
         }
         if (score !== 0) {
             this.scoreCtrl[playerId].incValue(score);
@@ -875,7 +923,7 @@ const Paiko = {
             const piece = findSpace(from[0], from[1]).firstElementChild;
             const space = findSpace(to[0], to[1]);
             if (piece.parentElement !== space){
-                space.appendChild(piece);
+                await this.animateMovePiece(piece, space, angle)
             }
         }
         if (score !== 0) {
@@ -902,8 +950,7 @@ const Paiko = {
             const piece = document.getElementById(`pk-piece-${id}`);
             console.log(piece);
             const hand = findHand(playerIndex, piece.dataset.type);
-            console.log(hand);
-            hand.appendChild(piece);
+            await this.animateMovePiece(piece, hand);
         }
     },
 
