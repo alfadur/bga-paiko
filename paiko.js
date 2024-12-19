@@ -566,8 +566,7 @@ const Paiko = {
                 }
                 case State.saiMove: {
                     clearTag("pk-selectable");
-                    const piece = findSpace(state.args.x, state.args.y)
-                        .querySelector(".pk-piece");
+                    const piece = findPiece(state.args.saiId);
                     piece.classList.add("pk-selectable", "pk-selected");
                     this.setClientState(State.clientMove, {
                         descriptionmyturn: "${you} must shift ${pieceIcon}",
@@ -972,8 +971,13 @@ const Paiko = {
         await Promise.all(highlights);
     },
 
-    async onNotificationCapture({id}) {
+    async onNotificationCapture({playerIndex, id, score}) {
         findPiece(id).remove();
+        if (score !== 0) {
+            const playerId = Object.keys(this.gamedatas.players).filter(playerId =>
+                this.gamedatas.players[playerId].index === playerIndex)[0];
+            this.scoreCtrl[playerId].incValue(score);
+        }
     },
 
     async onNotificationDraft({playerIndex, pieceIds}) {

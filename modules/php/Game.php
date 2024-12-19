@@ -77,7 +77,7 @@ class Game extends \Table
         foreach ($players as $playerId => $player) {
             $playerIndex = $this->getPlayerNoById($playerId) - 1;
             foreach (\PieceType::cases() as $type) {
-                foreach (range(0, 2) as $_) {
+                foreach (range(0, 2) as $ignored) {
                     $pieces[] = "($id, $playerIndex, $type->value, $hand)";
                     ++$id;
                 }
@@ -375,20 +375,22 @@ class Game extends \Table
             $this->gamestate->nextState(\State::NEXT_TURN);
         } else {
             $id = $captures & 0xFF;
-            $updated = false;
 
-            if (!$isFire) {
-                $type = intDiv($id, 3) % 8;
-                if (count(\PieceType::COVER[$type]) > 0) {
-                    $pieces = self::getObjectListFromDB(<<<EOF
+            $item = self::getObjectFromDB(<<<EOF
+                SELECT type, x, y 
+                FROM piece
+                WHERE id = $id
+                EOF);
+            $x = (int)$item['x'];
+            $y = (int)$item['y'];
+            $type = (int)$item['type'];
+
+            if (count(\PieceType::COVER[$type]) > 0) {
+                $pieces = self::getObjectListFromDB(<<<EOF
                         SELECT * FROM piece
                         EOF);
-                    $this->capture($this->get(\GameGlobal::LastPlayer), $pieces);
-                    $updated = true;
-                }
-            }
-
-            if (!$updated) {
+                $this->capture($this->get(\GameGlobal::LastPlayer), $pieces);
+            } else {
                 $this->set($isFire ? \GameGlobal::FireCaptures : \GameGlobal::Captures, $captures >> 8);
             }
 
@@ -400,8 +402,17 @@ class Game extends \Table
             $playerId = $this->getActivePlayerId();
             $playerIndex = 2 - $this->getPlayerNoById($playerId);
 
+            $score = $type !== \PieceType::Lotus->value ?
+                - $this->getBasePoints(1 - $playerIndex, $this->getBase($x, $y)) :
+                0;
+            if ($score !== 0) {
+                $this->postInc(\GameGlobal::Score, $score << 8 * (1 - $playerIndex));
+            }
+
             $this->notifyAllPlayers('Capture', clienttranslate('${pieceIcon} is captured'), [
+                'playerIndex' => (1 - $playerIndex),
                 'id' => $id,
+                'score' => $score,
                 'pieceIcon' => "$playerIndex,$id"
             ]);
             $this->gamestate->nextState(\State::RESERVE);
@@ -436,12 +447,10 @@ class Game extends \Table
     {
         $playerId = $this->getActivePlayerId();
         $playerIndex = $this->getPlayerNoById($playerId) - 1;
-        $sai = \PieceType::Sai->value;
-        $saiCoords = $this->get(\GameGlobal::SaiCoords);
+        $saiId = $this->get(\GameGlobal::SaiId) - 1;
         return [
-            'x' => $saiCoords & 0xFF,
-            'y' => $saiCoords >> 8,
-            'pieceIcon' => "$playerIndex,$sai"
+            'saiId' => $saiId,
+            'pieceIcon' => "$playerIndex,$saiId"
         ];
     }
 
@@ -617,7 +626,7 @@ class Game extends \Table
         $this->set(\GameGlobal::LastPlayer, $playerIndex);
 
         if ($piece === \PieceType::Sai) {
-            $this->set(\GameGlobal::SaiCoords, $x | $y << 8);
+            $this->set(\GameGlobal::SaiId, $id + 1);
             $this->gamestate->nextState(\State::SAI_MOVE);
         } elseif ($this->capture($playerIndex, $pieces)) {
             $this->gamestate->nextState(\State::CAPTURE);
@@ -630,8 +639,23 @@ class Game extends \Table
 
     public function actSkip()
     {
-        $this->set(\GameGlobal::SaiCoords, 0);
-        $this->gamestate->nextState(\State::NEXT_TURN);
+        $saiId = $this->get(\GameGlobal::SaiId) - 1;
+        $this->set(\GameGlobal::SaiId, 0);
+
+        $pieces = self::getObjectListFromDB(<<<EOF
+            SELECT piece.*
+            FROM piece AS sai INNER JOIN piece ON (
+                    piece.x BETWEEN sai.x - 5 AND sai.x + 5
+                AND piece.y BETWEEN sai.y - 5 AND sai.y + 5)
+            WHERE sai.id = $saiId
+            EOF);
+
+        if ($this->capture($this->get(\GameGlobal::LastPlayer), $pieces)) {
+            $this->gamestate->nextState(\State::CAPTURE);
+        } else {
+            $this->gamestate->nextState(\State::NEXT_TURN);
+        }
+
         $this->commitGlobals();
     }
 
@@ -645,15 +669,13 @@ class Game extends \Table
     {
         $piece = \PieceType::from($type);
 
-        $saiCoords = $this->get(\GameGlobal::SaiCoords);
+        $saiId = $this->get(\GameGlobal::SaiId);
 
-        if ($saiCoords) {
-            $saiX = $saiCoords & 0xFF;
-            $saiY = $saiCoords >> 8;
-            if ($saiX !== $x ||$saiY !== $y) {
+        if ($saiId) {
+            if ($saiId - 1 !== $id) {
                 throw new \BgaVisibleSystemException('Invalid sai');
             }
-            $this->set(\GameGlobal::SaiCoords, 0);
+            $this->set(\GameGlobal::SaiId, 0);
         }
 
         if (count($steps) > $piece->getMoves() || $piece->getMoves() === 0) {
