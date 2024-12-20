@@ -60,8 +60,19 @@ enum GameOption: string {
 }
 
 enum Stats {
-    final const TABLE_STATS_LIST = [];
-    final const PLAYER_STATS_LIST = [];
+    final const TURNS = 'turns';
+    final const DEPLOYS = 'deployments';
+    final const SHIFTS = 'shifts';
+    final const CAPTURES = 'captures';
+
+    final const TABLE_STATS_LIST = [
+        self::TURNS
+    ];
+    final const PLAYER_STATS_LIST = [
+        self::DEPLOYS,
+        self::SHIFTS,
+        self::CAPTURES
+    ];
 }
 
 enum PieceStatus: int {

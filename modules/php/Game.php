@@ -132,7 +132,14 @@ class Game extends \Table
 
     public function getGameProgression()
     {
-        return 0;
+        $scores = $this->get(\GameGlobal::Score);
+        $captures = $this->get(\GameGlobal::CapturedPieces);
+        $progress = (int)(max($scores & 0xFF, $scores >> 8) * 100 / 10);
+        if ($progress <= 50) {
+            $captureProgress = (int)(min($captures & 0xFF, $captures >> 8) * 100 / 13);
+            $progress = max($progress, $captureProgress);
+        }
+        return $progress;
     }
 
     private function checkBase(int $playerIndex, int $x, int $y): bool {
@@ -371,6 +378,7 @@ class Game extends \Table
 
     public function stNextTurn(): void
     {
+        $this->incStat(1, \Stats::TURNS, null);
         if ($this->checkGameEnd() || $this->checkTie()) {
             $this->gamestate->nextState(\State::GAME_END);
         } else {
@@ -442,6 +450,14 @@ class Game extends \Table
 
             $reserve = \PieceStatus::Reserve->value;
             $otherPlayerIndex = 1 - $playerIndex;
+
+            foreach ($this->loadPlayersBasicInfos() as $playerId => $player) {
+                $index = $player['player_no'] - 1;
+                if ($index === $otherPlayerIndex) {
+                    $this->incStat(1, \Stats::CAPTURES, $playerId );
+                }
+            }
+
             $reservePieces = (int)self::getUniqueValueFromDB(<<<EOF
                 SELECT COUNT(*)
                 FROM piece
@@ -670,6 +686,8 @@ class Game extends \Table
             'player' => $playerIndex
         ];
 
+        $this->incStat(1, \Stats::DEPLOYS, $playerId);
+
         $this->set(\GameGlobal::LastPlayer, $playerIndex);
 
         if ($piece === \PieceType::Sai) {
@@ -790,6 +808,8 @@ class Game extends \Table
             'isMove' => true,
             'pieceIcon' => "$playerIndex,$id"
         ]);
+
+        $this->incStat(1, \Stats::SHIFTS, $playerId);
 
         $this->set(\GameGlobal::LastPlayer, $playerIndex);
 

@@ -1,1 +1,26 @@
-{}
+{
+  "table": {
+    "turns":  {
+      "id": 10,
+      "name": "Turns",
+      "type": "int"
+    }
+  },
+  "player": {
+    "deployments": {
+      "id": 11,
+      "name": "Deployments",
+      "type": "int"
+    },
+    "shifts": {
+      "id": 12,
+      "name": "Shifts",
+      "type": "int"
+    },
+    "captures": {
+      "id": 13,
+      "name": "Captures",
+      "type": "int"
+    }
+  }
+}
