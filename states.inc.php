@@ -108,8 +108,8 @@ $machinestates = [
     State::SAI_MOVE => [
         Fsm::NAME => 'saiMove',
         Fsm::TYPE => FsmType::SINGLE_PLAYER,
-        Fsm::DESCRIPTION => clienttranslate('${actplayer} must move ${pieceIcon}'),
-        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must move ${pieceIcon}'),
+        Fsm::DESCRIPTION => clienttranslate('${actplayer} must shift ${pieceIcon}'),
+        Fsm::OWN_DESCRIPTION => clienttranslate('${you} must shift ${pieceIcon}'),
         Fsm::ARGUMENTS => 'argSaiMove',
         Fsm::POSSIBLE_ACTIONS => [
             'actMove',

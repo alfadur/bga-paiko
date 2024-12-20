@@ -791,13 +791,14 @@ const Paiko = {
             this.animateMovePiece(args.selectedPiece, args.sourceSpace);
         } else if (stateName === State.clientConfirm) {
             const piece = findSelectedPiece();
+            const angle = getStyle(piece, {angle: null}).angle;
             piece.classList.remove("pk-selected");
 
             const actions = this.gamedatas.gamestate.possibleactions;
             if (actions.indexOf(Action.move) >= 0) {
-                this.animateMovePiece(piece, args.sourceSpace, args.angle);
+                this.animateMovePiece(piece, args.sourceSpace, snapAngle(angle, [args.angle]));
             } else if (actions.indexOf(Action.deploy) >= 0) {
-                this.animateMovePiece(piece, findHand(this.playerIndex, piece.dataset.type), args.angle);
+                this.animateMovePiece(piece, findHand(this.playerIndex, piece.dataset.type), snapAngle(angle, [args.angle]));
             }
         }
         this.restoreServerGameState()
@@ -890,7 +891,10 @@ const Paiko = {
         }
 
         if (angle !== null) {
-            setStyle(piece, {angle});
+            const lastAngle = getStyle(piece, {angle: null}).angle;
+            setStyle(piece, {
+                angle: snapAngle(lastAngle, [angle])
+            });
         }
     },
 

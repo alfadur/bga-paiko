@@ -441,10 +441,11 @@ class Game extends \Table
             ]);
 
             $reserve = \PieceStatus::Reserve->value;
+            $otherPlayerIndex = 1 - $playerIndex;
             $reservePieces = (int)self::getUniqueValueFromDB(<<<EOF
                 SELECT COUNT(*)
                 FROM piece
-                WHERE player = $playerIndex AND status = $reserve
+                WHERE player = $otherPlayerIndex AND status = $reserve
                 EOF);
             if ($reservePieces === 0) {
                 $this->gamestate->nextState(\State::CAPTURE);
