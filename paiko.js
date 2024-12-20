@@ -333,10 +333,10 @@ function checkCaptures(playerIndex, sourceX, sourceY, angle, offsets, additional
     return false;
 }
 
-function getValidAngles(playerIndex, piece, spaceX, spaceY, coveredCoords) {
+function getValidAngles(playerIndex, piece, spaceX, spaceY, coveredCoords, ignores) {
     if (piece === PieceType.fire) {
         return range(4).filter(angle =>
-            !checkCaptures(playerIndex, spaceX, spaceY, angle, PieceThreat[piece], 1, [{x: spaceX, y: spaceY}]));
+            !checkCaptures(playerIndex, spaceX, spaceY, angle, PieceThreat[piece], 1, ignores));
     } else {
         return range(4).filter(angle =>
             coveredCoords.every(({coverX, coverY}) =>
@@ -370,7 +370,7 @@ function prepareDeploy(playerIndex, piece, redeploySource = null) {
             && (isBase || threat[playerIndex] > 0);
 
         if (isValid) {
-            const angles = getValidAngles(playerIndex, piece, spaceX, spaceY, coveredCoords);
+            const angles = getValidAngles(playerIndex, piece, spaceX, spaceY, coveredCoords, []);
             if (angles.length > 0) {
                 result.push({space, angles});
             }
@@ -512,7 +512,7 @@ function prepareMove(playerIndex, piece, sourceX, sourceY, angle) {
             const threatened = threat[1 - playerIndex] >= (piece === PieceType.fire ? 1 : 2);
 
             const isPassable = !threatened && space && space.querySelector(".pk-piece") === null;
-            const angles = getValidAngles(playerIndex, piece, x, y, coveredCoords);
+            const angles = getValidAngles(playerIndex, piece, x, y, coveredCoords, source);
 
             if (isPassable && angles.length > 0) {
                 result.push({...path, space, angles});
