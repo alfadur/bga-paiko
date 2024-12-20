@@ -146,6 +146,13 @@ function getStyle(element, style) {
     return style;
 }
 
+function getCenteredRect(element) {
+    const rect = element.getBoundingClientRect();
+    rect.centerX = (rect.left + rect.right) / 2;
+    rect.centerY = (rect.top + rect.bottom) / 2;
+    return rect;
+}
+
 function createPiece(id, playerIndex, type, angle = 0) {
     const spriteX = type % 4;
     const spriteY = type >> 2;
@@ -474,7 +481,8 @@ function getCoveredCoords(playerIndex, pieceType, sourceX, sourceY, angle) {
             return;
         }
 
-        const piece = findSpace(spaceX, spaceY).querySelector(`.pk-piece[data-player="${playerIndex}"]`);
+        const space = findSpace(spaceX, spaceY);
+        const piece = space && space.querySelector(`.pk-piece[data-player="${playerIndex}"]`);
         if (piece && getThreat(spaceX, spaceY, true, source)[1 - playerIndex] >= 2) {
             return {coverX: spaceX, coverY: spaceY};
         }
@@ -863,17 +871,36 @@ const Paiko = {
     },
 
     async animateMovePiece(piece, target, angle = null) {
-        const srcRect = piece.getBoundingClientRect();
-        target.appendChild(piece);
-        if (this.bgaAnimationsActive()) {
-            if (angle !== null) {
-                setStyle(piece, {angle});
-            }
-        } else {
-            if (angle !== null) {
-                setStyle(piece, {angle});
+        const srcRect = getCenteredRect(piece);
+        if (piece.parentElement !== target) {
+            target.appendChild(piece);
+            if (this.bgaAnimationsActive()) {
+                const dstRect = getCenteredRect(piece);
+
+                const style = {
+                    dx: srcRect.centerX - dstRect.centerX,
+                    dy: srcRect.centerY - dstRect.centerY,
+                    scale: srcRect.width / (dstRect.width || 1)
+                }
+                setStyle(piece, style);
+                piece.classList.add("moving");
+                await this.waitForAnimation(piece, "pk-move");
+                piece.classList.remove("moving");
             }
         }
+
+        if (angle !== null) {
+            setStyle(piece, {angle});
+        }
+    },
+
+    async animateRemovePiece(piece) {
+        if (this.bgaAnimationsActive()) {
+            piece.classList.add("removing");
+            await this.waitForAnimation(piece, "pk-remove");
+            piece.classList.remove("removing");
+        }
+        piece.remove();
     },
 
     onSpaceClicked(space) {
@@ -892,7 +919,7 @@ const Paiko = {
                     args: {
                         selectedPiece: piece,
                         targetSpace: space,
-                        angle: getStyle(piece, {angle: null}).angle,
+                        angle,
                         x: parseInt(space.dataset.x),
                         y: parseInt(space.dataset.y),
                         pieceIcon: `${this.playerIndex},${piece.dataset.id}`,
@@ -918,7 +945,7 @@ const Paiko = {
                         selectedPiece: piece,
                         sourceSpace: source,
                         targetSpace: space,
-                        angle: getStyle(piece, {angle: null}).angle,
+                        angle: angle,
                         x: parseInt(space.dataset.x),
                         y: parseInt(space.dataset.y),
                         pieceIcon: `${this.playerIndex},${piece.dataset.id}`,
@@ -1053,7 +1080,7 @@ const Paiko = {
     },
 
     async onNotificationCapture({playerIndex, id, score}) {
-        findPiece(id).remove();
+        await this.animateRemovePiece(findPiece(id));
         if (score !== 0) {
             const playerId = Object.keys(this.gamedatas.players).find(playerId =>
                 this.gamedatas.players[playerId].index === playerIndex);
@@ -1062,6 +1089,8 @@ const Paiko = {
     },
 
     async onNotificationDraft({playerIndex, pieceIds}) {
+        clearTag("pk-selectable");
+
         const lastPiece = findLastMovedPiece(playerIndex);
         if (lastPiece) {
             lastPiece.classList.remove("last-moved");
@@ -1070,7 +1099,9 @@ const Paiko = {
         for (const id of pieceIds) {
             const piece = document.getElementById(`pk-piece-${id}`);
             const hand = findHand(playerIndex, piece.dataset.type);
-            await this.animateMovePiece(piece, hand);
+            if (piece.parentElement !== hand) {
+                await this.animateMovePiece(piece, hand);
+            }
         }
     },
 
