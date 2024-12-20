@@ -307,12 +307,49 @@ function getThreat(spaceX, spaceY, covered = false, ignores = []) {
     return threat;
 }
 
-function prepareDeploy(playerIndex, piece) {
+function checkCaptures(playerIndex, sourceX, sourceY, angle, offsets, additionalThreat, ignores) {
+    for (const [x, y] of offsets) {
+        const {dx, dy} = getLocalCoords(x, y, angle);
+        const spaceX = sourceX + dx;
+        const spaceY = sourceY + dy;
+
+        if (ignores.every(({x, y}) => x !== spaceX || y !== spaceY)) {
+            const space = findSpace(spaceX, spaceY) || findHole(spaceX, spaceY);
+            if (space && space.querySelector(`.pk-piece[data-player="${playerIndex}"]`)) {
+                const threat = getThreat(spaceX, spaceY, true, ignores);
+                if (threat[1 - playerIndex] + additionalThreat >= 2) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+function getValidAngles(playerIndex, piece, spaceX, spaceY, coveredCoords) {
+    if (piece === PieceType.fire) {
+        return range(4).filter(angle =>
+            !checkCaptures(playerIndex, spaceX, spaceY, angle, PieceThreat[piece], 1, [{x: spaceX, y: spaceY}]));
+    } else {
+        return range(4).filter(angle =>
+            coveredCoords.every(({coverX, coverY}) =>
+                PieceCover[piece].some(([x, y]) => {
+                    const {dx, dy} = getLocalCoords(x, y, angle);
+                    return spaceX + dx === coverX && spaceY + dy === coverY;
+                })));
+    }
+}
+
+function prepareDeploy(playerIndex, piece, redeploySource = null) {
     const query = piece === PieceType.lotus ?
         ".pk-board-space:empty, .pk-board-hole:empty" :
         ".pk-board-space:empty"
     const spaces = Array.from(document.querySelectorAll(query));
     const result = [];
+
+    const coveredCoords = redeploySource ?
+        getCoveredCoords(playerIndex, piece, redeploySource.x, redeploySource.y, redeploySource.angle) :
+        [];
 
     for (const space of spaces) {
         const spaceX = parseInt(space.dataset.x);
@@ -324,8 +361,12 @@ function prepareDeploy(playerIndex, piece) {
             threat[1 - playerIndex] <= 2 :
             threat[1 - playerIndex] === 0
             && (isBase || threat[playerIndex] > 0);
+
         if (isValid) {
-            result.push(space);
+            const angles = getValidAngles(playerIndex, piece, spaceX, spaceY, coveredCoords);
+            if (angles.length > 0) {
+                result.push({space, angles});
+            }
         }
     }
     return result;
@@ -346,6 +387,14 @@ function *spacesAround(space) {
         const {x, y} = direction;
         yield [index++, {x: space.x + x, y: space.y + y}];
     }
+}
+
+function snapAngle(angle, angles) {
+    const steps = angles.map(a => [intMod(a - angle, 4), a]);
+    steps.sort();
+    const newAngle = steps[0][1];
+    const angleDiff = intMod(newAngle - angle + 2, 4) - 2;
+    return angle + angleDiff;
 }
 
 function* collectPaths(x, y, range) {
@@ -382,36 +431,64 @@ function* collectPaths(x, y, range) {
     }
 }
 
-function checkCaptures(playerIndex, sourceX, sourceY, angle, offsets, additionalThreat, ignores) {
-    for (const [x, y] of offsets) {
-        const {dx, dy} = getLocalCoords(x, y, angle);
-        const spaceX = sourceX + dx;
-        const spaceY = sourceY + dy;
+function getCoveredCoords(playerIndex, pieceType, sourceX, sourceY, angle) {
+    if (PieceCover[pieceType].length === 0)
+    {
+        return [];
+    }
 
-        if (ignores.every(({x, y}) => x !== spaceX || y !== spaceY)) {
-            const space = findSpace(spaceX, spaceY) || findHole(spaceX, spaceY);
-            if (space && space.querySelector(`.pk-piece[data-player="${playerIndex}"]`)) {
-                const threat = getThreat(spaceX, spaceY, true, ignores);
-                if (threat[1 - playerIndex] + additionalThreat >= 2) {
-                    return true;
+    const covered = [];
+    for (let y = sourceY - 2; y <= sourceY + 2; ++y) {
+        for (let x = sourceX - 2; x <= sourceX + 2; ++x) {
+            if (x === sourceX && y === sourceY) {
+                continue;
+            }
+
+            const space = findSpace(x, y);
+            const piece = space && space.querySelector(".pk-piece");
+            const cover = piece && PieceType[piece.dataset.type];
+
+            if (cover && cover.length > 0) {
+                const angle = getStyle(piece, {angle: null}).angle;
+
+                for (const shift of cover) {
+                    const {dx, dy} = getLocalCoords(shift[0], shift[1], angle);
+                    const key = JSON.stringify({
+                        x: x + dx,
+                        y: y + dy
+                    });
+                    covered[key] = true;
                 }
             }
         }
     }
-    return false;
+
+    const source = [{x: sourceX, y: sourceY}];
+    return PieceCover[pieceType].map(([x, y]) => {
+        const {dx, dy} = getLocalCoords(x, y, angle);
+        const spaceX = sourceX + dx;
+        const spaceY = sourceY + dy;
+
+        const isBase = playerIndex ? spaceX > 6 && spaceY < 7 : spaceX < 7 && spaceY > 6;
+        if (isBase || covered[JSON.stringify({x: spaceX, y: spaceY})]) {
+            return;
+        }
+
+        const piece = findSpace(spaceX, spaceY).querySelector(`.pk-piece[data-player="${playerIndex}"]`);
+        if (piece && getThreat(spaceX, spaceY, true, source)[1 - playerIndex] >= 2) {
+            return {coverX: spaceX, coverY: spaceY};
+        }
+    }).filter(coords => coords);
 }
 
 function prepareMove(playerIndex, piece, sourceX, sourceY, angle) {
     const movementRange =
         piece === PieceType.lotus || piece === PieceType.air ? 0 :
         piece === PieceType.earth ? 1 : 2;
-    const ignores = piece === PieceType.fire ? [{x: sourceX, y: sourceY}] : [];
+    const source =[{x: sourceX, y: sourceY}];
     const result = [];
 
-    if (piece === PieceType.sai
-        && checkCaptures(playerIndex, sourceX, sourceY, angle, PieceCover[piece], 0, [{x: sourceX, y: sourceY}])) {
-        return result;
-    }
+    const coveredCoords = getCoveredCoords(playerIndex, piece, sourceX, sourceY, angle);
 
     const paths = collectPaths(sourceX, sourceY, movementRange);
     let item = paths.next();
@@ -419,25 +496,23 @@ function prepareMove(playerIndex, piece, sourceX, sourceY, angle) {
     while (!item.done) {
         const path = item.value;
         const space = findSpace(path.space.x, path.space.y);
-        let threatened = false;
-        let selfCaptures = false;
 
         if (space) {
             const x = parseInt(space.dataset.x);
             const y = parseInt(space.dataset.y);
-            const threat = getThreat(x, y, true, ignores);
-            threatened = threat[1 - playerIndex] >= (piece === PieceType.fire ? 1 : 2);
+            const threat = getThreat(x, y, true, source);
+            const threatened = threat[1 - playerIndex] >= (piece === PieceType.fire ? 1 : 2);
 
-            if (piece === PieceType.fire) {
-                selfCaptures = range(4).some(angle => checkCaptures(playerIndex, x, y, angle, PieceThreat[piece], 1, ignores));
+            const isPassable = !threatened && space && space.querySelector(".pk-piece") === null;
+            const angles = getValidAngles(playerIndex, piece, x, y, coveredCoords);
+
+            if (isPassable && angles.length > 0) {
+                result.push({...path, space, angles});
             }
+            item = paths.next(isPassable);
+        } else {
+            item = paths.next(false);
         }
-
-        const isPassable = !threatened && space && space.querySelector(".pk-piece") === null;
-        if (isPassable && !selfCaptures) {
-            result.push(path);
-        }
-        item = paths.next(isPassable);
     }
 
     return result;
@@ -534,7 +609,7 @@ const Paiko = {
         piece.addEventListener("mousedown", event => {
             event.stopPropagation();
             this.onPieceClick(piece);
-        })
+        });
     },
 
     onEnteringState(stateName, state) {
@@ -583,9 +658,9 @@ const Paiko = {
                 }
                 case State.clientDeploy: {
                     const type = parseInt(state.args.selectedPiece.dataset.type);
-                    const spaces = prepareDeploy(this.playerIndex, type);
-                    for (const space of spaces) {
-                        space.classList.add("pk-selectable");
+                    this.paths = prepareDeploy(this.playerIndex, type);
+                    for (const path of this.paths) {
+                        path.space.classList.add("pk-selectable");
                     }
                     break;
                 }
@@ -597,23 +672,14 @@ const Paiko = {
                     const y = parseInt(selectedPiece.parentElement.dataset.y);
 
                     this.paths = prepareMove(this.playerIndex, type, x, y, angle);
-                    for (const {space: {x, y}} of this.paths) {
-                        findSpace(x, y).classList.add("pk-selectable");
-                    }
 
                     if (type === PieceType.water) {
-                        const spaces = prepareDeploy(this.playerIndex, type);
-                        for (const space of spaces) {
-                            space.classList.add("pk-selectable");
-                        }
+                        this.paths.push(...prepareDeploy(this.playerIndex, type, {x, y, angle}));
                     }
 
-                    /*if (!this.checkAction(Action.skip, true)) {
-                        const pieces = document.querySelectorAll(`.pk-board-space .pk-piece[data-player="${this.playerIndex}"]`);
-                        for (const piece of pieces) {
-                            piece.classList.add("pk-selectable");
-                        }
-                    }*/
+                    for (const {space} of this.paths) {
+                        space.classList.add("pk-selectable");
+                    }
 
                     break;
                 }
@@ -742,15 +808,16 @@ const Paiko = {
         if (this.checkAction(Action.move, true)) {
             const {sourceSpace} = args;
             const type = parseInt(selectedPiece.dataset.type);
-            const x = parseInt(targetSpace.dataset.x);
-            const y = parseInt(targetSpace.dataset.y);
-            const path = this.paths.filter(({space}) => space.x === x && space.y === y)[0];
+            const path = this.paths.find(path => path.space === targetSpace);
 
-            if (!path) {
+            if (!path.steps) {
+                const sourceSpace = selectedPiece.parentElement;
                 this.bgaPerformAction(Action.deploy, {
                     id: selectedPiece.dataset.id,
                     x: targetSpace.dataset.x,
                     y: targetSpace.dataset.y,
+                    fromX: sourceSpace.dataset.x,
+                    fromY: sourceSpace.dataset.y,
                     type: type,
                     waterRedeploy: true,
                     angle: intMod(getStyle(selectedPiece, {angle: null}).angle, 4)
@@ -814,9 +881,12 @@ const Paiko = {
         if (space.classList.contains("pk-selectable")) {
             const state = this.gamedatas.gamestate;
             const piece = state.args && state.args.selectedPiece;
+            const angle = piece && getStyle(piece, {angle: null}).angle;
 
             if (this.checkAction(Action.deploy, true)) {
-                this.animateMovePiece(piece, space);
+                const path = this.paths.find(path => path.space === space);
+                this.animateMovePiece(piece, space,
+                    snapAngle(angle, path.angles));
                 this.setClientState(State.clientConfirm, {
                     descriptionmyturn: _("${you} must rotate and confirm the deployment of ${pieceIcon}"),
                     args: {
@@ -832,7 +902,10 @@ const Paiko = {
             } else if (this.checkAction(Action.clientMove, true)) {
                 const piece = this.gamedatas.gamestate.args.selectedPiece;
                 const source = piece.parentElement;
-                this.animateMovePiece(piece, space)
+
+                const path = this.paths.find(path => path.space === space);
+                this.animateMovePiece(piece, space,
+                    path ?  snapAngle(angle, path.angles) : null);
 
                 const actions = [Action.move, Action.deploy];
                 if (this.checkAction(Action.skip, true)) {
@@ -914,7 +987,14 @@ const Paiko = {
                 piece.classList.add("pk-selected");
             } else if (piece.classList.contains("pk-selected") && state.name === State.clientConfirm) {
                 const {angle} = getStyle(piece, {angle: null});
-                setStyle(piece, {angle: angle + 1});
+                const path = this.paths.find(path => path.space === piece.parentElement);
+                if (path) {
+                    setStyle(piece, {
+                        angle: path ?
+                            snapAngle(angle + 1, path.angles) :
+                            angle + 1
+                    });
+                }
             } else if ([State.action, State.clientDeploy, State.clientMove, State.clientConfirm].indexOf(state.name) >= 0) {
                 this.cancelAction(state.name, state.args);
                 clearTag("pk-selected");
@@ -975,8 +1055,8 @@ const Paiko = {
     async onNotificationCapture({playerIndex, id, score}) {
         findPiece(id).remove();
         if (score !== 0) {
-            const playerId = Object.keys(this.gamedatas.players).filter(playerId =>
-                this.gamedatas.players[playerId].index === playerIndex)[0];
+            const playerId = Object.keys(this.gamedatas.players).find(playerId =>
+                this.gamedatas.players[playerId].index === playerIndex);
             this.scoreCtrl[playerId].incValue(score);
         }
     },

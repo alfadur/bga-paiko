@@ -422,7 +422,7 @@ class Game extends \Table
             }
 
             $playerId = $this->getActivePlayerId();
-            $playerIndex = 2 - $this->getPlayerNoById($playerId);
+            $playerIndex = $this->getPlayerNoById($playerId) - 1;
 
             $score = $type !== \PieceType::Lotus->value ?
                 - $this->getBasePoints($playerIndex, $this->getBase($x, $y)) :
@@ -434,7 +434,7 @@ class Game extends \Table
             $this->postInc(\GameGlobal::CapturedPieces, 1 << $playerIndex * 8);
 
             $this->notifyAllPlayers('Capture', clienttranslate('${pieceIcon} is captured'), [
-                'playerIndex' => (1 - $playerIndex),
+                'playerIndex' => $playerIndex,
                 'id' => $id,
                 'score' => $score,
                 'pieceIcon' => "$playerIndex,$id"
@@ -566,6 +566,8 @@ class Game extends \Table
         #[IntParam(min: 0, max:7)] int $type,
         #[IntParam(min: 0, max:13)] int $x,
         #[IntParam(min: 0, max:13)] int $y,
+        #[IntParam(min: 0, max:13)] int $fromX = 0,
+        #[IntParam(min: 0, max:13)] int $fromY = 0,
         #[IntParam(min: 0, max:3)] int $angle = 0,
         #[BoolParam] bool $waterRedeploy = false): void
     {
@@ -616,11 +618,14 @@ class Game extends \Table
             "status = $board" :
             "status = $hand";
 
+        $redeployCheck = $waterRedeploy ?
+            "x = $fromX AND y = $fromY" : '1';
         self::DbQuery(<<<EOF
             UPDATE piece 
             SET x = $x, y = $y, angle = $angle, status = $board
             WHERE id = $id AND type = $type
               AND player = $playerIndex AND $handCheck
+              AND $redeployCheck
             LIMIT 1
             EOF);
 
@@ -628,7 +633,13 @@ class Game extends \Table
             throw new \BgaVisibleSystemException('Invalid deploy');
         }
 
-        $score = $piece !== \PieceType::Lotus ? $this->getBasePoints($playerIndex, $this->getBase($x, $y)) : 0;
+        $score = $piece !== \PieceType::Lotus ?
+            $this->getBasePoints($playerIndex, $this->getBase($x, $y)) :
+            0;
+        if ($waterRedeploy) {
+            $score -= $this->getBasePoints($playerIndex, $this->getBase($fromX, $fromY));
+        }
+
         if ($score !== 0) {
             $this->postInc(\GameGlobal::Score, $score << 8 * $playerIndex);
         }
