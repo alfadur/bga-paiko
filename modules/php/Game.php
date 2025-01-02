@@ -797,7 +797,7 @@ class Game extends \Table
             $this->postInc(\GameGlobal::Score, $score << 8 * $playerIndex);
         }
 
-        $this->notifyAllPlayers('Move', clienttranslate('${player_name} moves ${pieceIcon}'), [
+        $this->notifyAllPlayers('Move', clienttranslate('${player_name} shifts ${pieceIcon}'), [
             'player_name' => $this->getPlayerNameById($playerId),
             'playerId' => $playerId,
             'id' => $id,

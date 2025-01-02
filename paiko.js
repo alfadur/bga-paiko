@@ -122,8 +122,8 @@ function createElement(parent, html, position = null) {
 }
 
 /**
- * @param {Element} element
- * @param {Object.<string, int|string>} style
+ * @param {HTMLElement} element
+ * @param {Object.<string, int|string|null>} style
  */
 function setStyle(element, style) {
     for (const key of Object.keys(style)) {
@@ -158,7 +158,8 @@ function createPiece(id, playerIndex, type, angle = 0) {
     const spriteY = type >> 2;
     const idString = id === null ? "" : `id="pk-piece-${id}"`;
     const data = id === null ? "" : `data-id="${id}"`;
-    return `<div ${idString} class="pk-piece" style="--angle: ${angle}; --sprite-x: ${spriteX}; --sprite-y: ${spriteY}" 
+    const typeClass = id === null? "" : `pk-piece-type-${playerIndex}-${type}`;
+    return `<div ${idString} class="pk-piece ${typeClass}" style="--angle: ${angle}; --sprite-x: ${spriteX}; --sprite-y: ${spriteY}" 
         data-type="${type}" data-player="${playerIndex}" ${data}>
         <div class="pk-piece-shadow"></div>
         <div class="pk-piece-base"></div>
@@ -213,6 +214,30 @@ function createStack(className, playerIndex, type, invert) {
     invert = invert ? "invert" : "";
     return `<div id="${className}-${playerIndex}-${type}" class="${className} ${invert}" data-player="${playerIndex}" data-type="${type}">
     </div>`;
+}
+
+function createHelp(playerIndex, piece, name, description) {
+    const spaces = [];
+    const threat = PieceThreat[piece];
+    const cover = PieceCover[piece];
+
+    for (const row of range(5)) {
+        for (const column of range(5)) {
+            const x = column - 2;
+            const y = piece === PieceType.bow ? row - 4 : row - 2;
+            const kind = threat.some(([tx, ty]) => tx === x && ty === y) ? "threat" :
+                cover.some(([tx, ty]) => tx === x && ty === y) ? "cover" : "";
+            const content = x === 0 && y === 0 ? createPiece(null, playerIndex, piece) : "";
+            spaces.push(`<div class="pk-help-grid-space ${kind}">${content}</div>`);
+        }
+    }
+
+    const lines = description.map(text => `<div class="pk-help-line">${text}</div>`);
+    return `<div class="pk-piece-help">
+        <div class="pk-title">${name}</div>
+        <div class="pk-help-grid">${spaces.join("")}</div>
+        <div class="pk-help-lines">${lines.join("")}</div>
+    </div>`
 }
 
 
@@ -541,6 +566,13 @@ const Paiko = {
     constructor() {
         console.log(`${gameName} constructor`);
         this.playerIndex = null;
+        try {
+            this.useOffsetAnimation =
+                CSS.supports("offset-path", "path('M 0 0')")
+                && CSS.supports("offset-anchor", "top left");
+        } catch (e) {
+            this.useOffsetAnimation = false;
+        }
     },
 
     setup(data) {
@@ -604,12 +636,74 @@ const Paiko = {
             }
         }
 
+        this.initPiecesHelp();
+
         this.bgaSetupPromiseNotifications({
             logger: console.log,
             prefix: "onNotification"
         });
 
         console.log("Ending game setup");
+    },
+
+    initPiecesHelp() {
+        for (const type of range(8)) {
+            let name = "";
+            const lines = [];
+            switch (type) {
+                case PieceType.sai: {
+                    name = _("Sai");
+                    lines.push(_("Shifts up to 2 squares"));
+                    lines.push(_("Can shift immediately upon being deployed. Capture only happens after the shift"));
+                    break;
+                }
+                case PieceType.sword: {
+                    name = _("Sword");
+                    lines.push(_("Shifts up to 2 squares"));
+                    break;
+                }
+                case PieceType.bow: {
+                    name = _("Bow");
+                    lines.push(_("Shifts up to 2 squares"));
+                    break;
+                }
+                case PieceType.lotus: {
+                    name = _("Lotus");
+                    lines.push(_("Cannot shift"));
+                    lines.push(_("Covers itself"));
+                    lines.push(_("Can be deployed in any unoccupied square, including black squares, where it's not immediately captured"));
+                    lines.push(_("Doesn't give any points"))
+                    break;
+                }
+                case PieceType.air: {
+                    name = _("Air");
+                    lines.push(_("Cannot shift"));
+                    break;
+                }
+                case PieceType.fire: {
+                    name = _("Fire");
+                    lines.push(_("Shifts up to 2 squares"));
+                    lines.push(_("Threatens all pieces, including itself"));
+                    break;
+                }
+                case PieceType.earth: {
+                    name = _("Earth");
+                    lines.push(_("Shifts 1 square"));
+                    break;
+                }
+                case PieceType.water: {
+                    name = _("Water");
+                    lines.push(_("Shifts up to 2 squares"));
+                    lines.push(_("Instead of a shift, can be redeployed according to standard deployment rules, including into its own current threat"));
+                    break;
+                }
+            }
+
+            for (const index in range(2)) {
+                const html = createHelp(index, type, name, lines);
+                this.addTooltipHtmlToClass(`pk-piece-type-${index}-${type}`, html);
+            }
+        }
     },
 
     addPiece(id, parent, playerIndex, type, angle = 0) {
@@ -876,17 +970,34 @@ const Paiko = {
         if (piece.parentElement !== target) {
             target.appendChild(piece);
             if (this.bgaAnimationsActive()) {
+                setStyle(piece, {path: null});
                 const dstRect = getCenteredRect(piece);
 
-                const style = {
-                    dx: srcRect.centerX - dstRect.centerX,
-                    dy: srcRect.centerY - dstRect.centerY,
-                    scale: srcRect.width / (dstRect.width || 1)
+                if (this.useOffsetAnimation) {
+                    const [startX, startY] = [dstRect.width / 2, dstRect.height / 2];
+                    const [dX, dY] = [(dstRect.centerX - srcRect.centerX), (dstRect.centerY - srcRect.centerY)];
+                    const distance = Math.sqrt(dX * dX + dY * dY);
+                    const path = `"m ${startX} ${startY} q ${-dX / 2 - dY / 4} ${-dY / 2 + dX / 4} ${-dX} ${-dY}"`;
+                    console.log(srcRect.centerX, srcRect.centerY, dX, dY, distance);
+                    setStyle(piece, {
+                        path,
+                        time: (Math.min(500, Math.max(200, distance))).toString() + "ms"
+                    });
+                    piece.classList.add("moving-offset");
+                    await this.waitForAnimation(piece, "pk-move-offset");
+                    piece.classList.remove("moving-offset");
+                    setStyle(piece, {path: null});
+                } else {
+                    const style = {
+                        dx: srcRect.centerX - dstRect.centerX,
+                        dy: srcRect.centerY - dstRect.centerY,
+                        scale: srcRect.width / (dstRect.width || 1)
+                    }
+                    setStyle(piece, style);
+                    piece.classList.add("moving");
+                    await this.waitForAnimation(piece, "pk-move");
+                    piece.classList.remove("moving");
                 }
-                setStyle(piece, style);
-                piece.classList.add("moving");
-                await this.waitForAnimation(piece, "pk-move");
-                piece.classList.remove("moving");
             }
         }
 
