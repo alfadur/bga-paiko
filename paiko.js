@@ -18,8 +18,7 @@ const State = {
     reserve: "reserve",
     clientDraft: "clientDraft",
     clientDeploy: "clientDeploy",
-    clientMove: "clientMove",
-    clientConfirm: "clientConfirm"
+    clientMove: "clientMove"
 }
 Object.freeze(State);
 
@@ -27,8 +26,7 @@ const Action = {
     draft: "actDraft",
     move: "actMove",
     deploy: "actDeploy",
-    skip: "actSkip",
-    clientMove: "actClientMove",
+    skip: "actSkip"
 };
 Object.freeze(Action);
 
@@ -514,14 +512,30 @@ function getCoveredCoords(playerIndex, pieceType, sourceX, sourceY, angle) {
     }).filter(coords => coords);
 }
 
-function prepareMove(playerIndex, piece, sourceX, sourceY, angle) {
+function prepareMove(playerIndex, piece, space, angle) {
     const movementRange =
         piece === PieceType.lotus || piece === PieceType.air ? 0 :
         piece === PieceType.earth ? 1 : 2;
+
+    const sourceX = parseInt(space.dataset.x);
+    const sourceY = parseInt(space.dataset.y);
+
     const source =[{x: sourceX, y: sourceY}];
     const result = [];
 
+    range(4).filter(a => intMod(angle, 4) !== a)
+
     const coveredCoords = getCoveredCoords(playerIndex, piece, sourceX, sourceY, angle);
+
+    const sourceAngles = getValidAngles(playerIndex, piece, sourceX, sourceY, coveredCoords, source).filter(a => intMod(angle, 4) !== a);
+
+    if (sourceAngles.length > 0) {
+        result.push({
+            steps: [],
+            space,
+            angles: sourceAngles
+        });
+    }
 
     const paths = collectPaths(sourceX, sourceY, movementRange);
     let item = paths.next();
@@ -654,7 +668,7 @@ const Paiko = {
                 case PieceType.sai: {
                     name = _("Sai");
                     lines.push(_("Shifts up to 2 squares"));
-                    lines.push(_("Can shift immediately upon being deployed. Capture only happens after the shift"));
+                    lines.push(_("Can shift immediately upon being deployed, before the capture phase"));
                     break;
                 }
                 case PieceType.sword: {
@@ -688,7 +702,7 @@ const Paiko = {
                 }
                 case PieceType.earth: {
                     name = _("Earth");
-                    lines.push(_("Shifts 1 square"));
+                    lines.push(_("Shifts up to 1 square"));
                     break;
                 }
                 case PieceType.water: {
@@ -752,9 +766,10 @@ const Paiko = {
                             sourceSpace: piece.parentElement,
                             selectedPiece: piece,
                             pieceIcon: `${this.playerIndex},${piece.dataset.id}`,
+                            angle: intMod(getStyle(piece, {angle: null}).angle, 4),
                             canSkip: true
                         },
-                        possibleactions: [Action.clientMove, Action.skip]
+                        possibleactions: [Action.move, Action.skip]
                     });
                     break;
                 }
@@ -768,25 +783,19 @@ const Paiko = {
                 }
                 case State.clientMove: {
                     const selectedPiece = state.args.selectedPiece;
+
                     const type = parseInt(selectedPiece.dataset.type);
                     const angle = getStyle(selectedPiece, {angle: null}).angle;
                     const x = parseInt(selectedPiece.parentElement.dataset.x);
                     const y = parseInt(selectedPiece.parentElement.dataset.y);
 
-                    this.paths = prepareMove(this.playerIndex, type, x, y, angle);
-
+                    this.paths = prepareMove(this.playerIndex, type, selectedPiece.parentElement, angle);
                     if (type === PieceType.water) {
                         this.paths.push(...prepareDeploy(this.playerIndex, type, {x, y, angle}));
                     }
-
                     for (const {space} of this.paths) {
                         space.classList.add("pk-selectable");
                     }
-
-                    break;
-                }
-                case State.clientConfirm: {
-                    state.args.selectedPiece.classList.add("pk-selected");
                     break;
                 }
             }
@@ -847,8 +856,10 @@ const Paiko = {
                     }
                     break;
                 }
-                case State.clientConfirm: {
+                case State.clientDeploy:
+                case State.clientMove:{
                     this.addActionButton("pk-confirm-button", _("Confirm"), () => this.confirmAction(stateName, args));
+                    document.getElementById("pk-confirm-button").classList.add("hidden");
                     break;
                 }
             }
@@ -856,8 +867,8 @@ const Paiko = {
             const cancellableStates = [
                 State.clientDraft,
                 State.clientDeploy,
-                State.clientConfirm];
-            if (cancellableStates.indexOf(stateName) >= 0) {
+                State.clientMove];
+            if (cancellableStates.indexOf(stateName) >= 0 && !args.canSkip) {
                 this.addActionButton("pk-cancel", _("Cancel"), () => this.cancelAction(stateName, args), null, null, "gray");
             }
 
@@ -881,19 +892,13 @@ const Paiko = {
                 this.animateMovePiece(piece, findReserve(this.playerIndex, piece.dataset.type));
                 await this.wait(120);
             }
-        } else if (stateName === State.clientMove) {
-            this.animateMovePiece(args.selectedPiece, args.sourceSpace);
-        } else if (stateName === State.clientConfirm) {
+        } else if (stateName === State.clientMove || stateName === State.clientDeploy) {
             const piece = findSelectedPiece();
             const angle = getStyle(piece, {angle: null}).angle;
-            piece.classList.remove("pk-selected");
 
-            const actions = this.gamedatas.gamestate.possibleactions;
-            if (actions.indexOf(Action.move) >= 0) {
-                this.animateMovePiece(piece, args.sourceSpace, snapAngle(angle, [args.angle]));
-            } else if (actions.indexOf(Action.deploy) >= 0) {
-                this.animateMovePiece(piece, findHand(this.playerIndex, piece.dataset.type), snapAngle(angle, [args.angle]));
-            }
+            const target = stateName === State.clientMove ? args.sourceSpace : findHand(this.playerIndex, piece.dataset.type)
+
+            this.animateMovePiece(piece, target, snapAngle(angle, [args.angle]));
         }
         this.restoreServerGameState()
     },
@@ -907,7 +912,9 @@ const Paiko = {
     },
 
     confirmAction(stateName, args) {
-        const {selectedPiece, targetSpace} = args
+        const {selectedPiece} = args;
+        const targetSpace = selectedPiece.parentElement;
+
         if (this.checkAction(Action.move, true)) {
             const {sourceSpace} = args;
             const type = parseInt(selectedPiece.dataset.type);
@@ -977,8 +984,9 @@ const Paiko = {
                     const [startX, startY] = [dstRect.width / 2, dstRect.height / 2];
                     const [dX, dY] = [(dstRect.centerX - srcRect.centerX), (dstRect.centerY - srcRect.centerY)];
                     const distance = Math.sqrt(dX * dX + dY * dY);
-                    const path = `"m ${startX} ${startY} q ${-dX / 2 - dY / 4} ${-dY / 2 + dX / 4} ${-dX} ${-dY}"`;
-                    console.log(srcRect.centerX, srcRect.centerY, dX, dY, distance);
+                    const sign = dX <= 0 ? 1 : -1;
+                    const path = `"m ${startX} ${startY} q ${-dX / 2 - sign * dY / 4} ${-dY / 2 + sign * dX / 4} ${-dX} ${-dY}"`;
+
                     setStyle(piece, {
                         path,
                         time: (Math.min(500, Math.max(200, distance))).toString() + "ms"
@@ -1029,19 +1037,11 @@ const Paiko = {
                 const path = this.paths.find(path => path.space === space);
                 this.animateMovePiece(piece, space,
                     snapAngle(angle, path.angles));
-                this.setClientState(State.clientConfirm, {
-                    descriptionmyturn: _("${you} must rotate and confirm the deployment of ${pieceIcon}"),
-                    args: {
-                        selectedPiece: piece,
-                        targetSpace: space,
-                        angle,
-                        x: parseInt(space.dataset.x),
-                        y: parseInt(space.dataset.y),
-                        pieceIcon: `${this.playerIndex},${piece.dataset.id}`,
-                    },
-                    possibleactions: [Action.deploy]
+                this.statusBar.setTitle(_("${you} must rotate ${pieceIcon} and confirm the deployment"), {
+                    pieceIcon: `${this.playerIndex},${piece.dataset.id}`
                 })
-            } else if (this.checkAction(Action.clientMove, true)) {
+                document.getElementById("pk-confirm-button").classList.remove("hidden");
+            } else if (this.checkAction(Action.move, true)) {
                 const piece = this.gamedatas.gamestate.args.selectedPiece;
                 const source = piece.parentElement;
 
@@ -1049,25 +1049,15 @@ const Paiko = {
                 this.animateMovePiece(piece, space,
                     path ?  snapAngle(angle, path.angles) : null);
 
-                const actions = [Action.move, Action.deploy];
+                const actions = [Action.move];
                 if (this.checkAction(Action.skip, true)) {
                     actions.push(Action.skip);
                 }
 
-                this.setClientState(State.clientConfirm, {
-                    descriptionmyturn: _("${you} must rotate and confirm the shift of ${pieceIcon}"),
-                    args: {
-                        selectedPiece: piece,
-                        sourceSpace: source,
-                        targetSpace: space,
-                        angle: angle,
-                        x: parseInt(space.dataset.x),
-                        y: parseInt(space.dataset.y),
-                        pieceIcon: `${this.playerIndex},${piece.dataset.id}`,
-                        canSkip: this.gamedatas.gamestate.args && this.gamedatas.gamestate.args.canSkip
-                    },
-                    possibleactions: actions
+                this.statusBar.setTitle(_("${you} must rotate ${pieceIcon} and confirm the shift"), {
+                    pieceIcon: `${this.playerIndex},${piece.dataset.id}`
                 })
+                document.getElementById("pk-confirm-button").classList.remove("hidden");
             }
         }
     },
@@ -1122,22 +1112,27 @@ const Paiko = {
                     descriptionmyturn: _("${you} must select the space to deploy ${pieceIcon}"),
                     args: {
                         selectedPiece: piece,
-                        pieceIcon: `${this.playerIndex},${piece.dataset.id}`
+                        pieceIcon: `${this.playerIndex},${piece.dataset.id}`,
+                        angle: intMod(getStyle(piece, {angle: null}).angle, 4)
                     },
                     possibleactions: [Action.deploy]
                 });
                 piece.classList.add("pk-selected");
-            } else if (piece.classList.contains("pk-selected") && state.name === State.clientConfirm) {
+            } else if (piece.classList.contains("pk-selected") && [State.clientDeploy, State.clientMove].indexOf(state.name) >= 0) {
                 const {angle} = getStyle(piece, {angle: null});
                 const path = this.paths.find(path => path.space === piece.parentElement);
-                if (path) {
-                    setStyle(piece, {
-                        angle: path ?
-                            snapAngle(angle + 1, path.angles) :
-                            angle + 1
-                    });
+                setStyle(piece, {
+                    angle: path ?
+                        snapAngle(angle + 1, path.angles) :
+                        angle + 1
+                });
+                if (state.name !== State.clientDeploy) {
+                    this.statusBar.setTitle(_("${you} must confirm the rotation of ${pieceIcon}"), {
+                        pieceIcon: `${this.playerIndex},${piece.dataset.id}`
+                    })
+                    document.getElementById("pk-confirm-button").classList.remove("hidden");
                 }
-            } else if ([State.action, State.clientDeploy, State.clientMove, State.clientConfirm].indexOf(state.name) >= 0) {
+            } else if ([State.action, State.clientDeploy, State.clientMove].indexOf(state.name) >= 0) {
                 this.cancelAction(state.name, state.args);
                 clearTag("pk-selected");
                 this.setClientState(State.clientMove, {
@@ -1145,9 +1140,10 @@ const Paiko = {
                     args: {
                         sourceSpace: piece.parentElement,
                         selectedPiece: piece,
-                        pieceIcon: `${this.playerIndex},${piece.dataset.id}`
+                        pieceIcon: `${this.playerIndex},${piece.dataset.id}`,
+                        angle: intMod(getStyle(piece, {angle: null}).angle, 4)
                     },
-                    possibleactions: [Action.clientMove]
+                    possibleactions: [Action.move]
                 });
                 piece.classList.add("pk-selected");
             }
@@ -1211,13 +1207,18 @@ const Paiko = {
             lastPiece.classList.remove("last-moved");
         }
 
+        const animations = [];
+
         for (const id of pieceIds) {
             const piece = document.getElementById(`pk-piece-${id}`);
             const hand = findHand(playerIndex, piece.dataset.type);
             if (piece.parentElement !== hand) {
-                await this.animateMovePiece(piece, hand);
+                animations.push(this.animateMovePiece(piece, hand));
+                await this.wait(240);
             }
         }
+
+        await Promise.all(animations);
     },
 
     formatPiece(playerIndex, ...ids) {
