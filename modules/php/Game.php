@@ -755,7 +755,9 @@ class Game extends \Table
 
         $this->updateLastPiece($playerIndex, $id, false);
 
-        $pieces = null;
+        $pieces = $this->getNearbyPieces($x, $y, 5 + count($steps));
+        $pieces = array_filter($pieces, fn($piece) => (int)$piece['x'] !== $x || (int)$piece['y'] !== $y);
+
         [$toX, $toY] = [$x, $y];
         foreach ($steps as $step) {
             [$dx, $dy] = DIRECTIONS[$step];
@@ -766,10 +768,6 @@ class Game extends \Table
                 throw new \BgaVisibleSystemException('Invalid coordinates');
             }
 
-            if ($pieces === null) {
-                $pieces = $this->getNearbyPieces($toX, $toY);
-                $pieces = array_filter($pieces, fn($piece) => (int)$piece['x'] !== $x || (int)$piece['y'] !== $y);
-            }
             $threats = $this->getThreat($toX, $toY, $pieces, true);
             $cover = $this->getCover($toX, $toY, $pieces);
             $selfThreat = $piece === \PieceType::Fire ? 1 : 0;
