@@ -135,7 +135,7 @@ $machinestates = [
     State::RESERVE => [
         Fsm::NAME => 'reserve',
         Fsm::TYPE => FsmType::SINGLE_PLAYER,
-        Fsm::DESCRIPTION => clienttranslate('${actplayer} must choose a tile from the opponents reserve'),
+        Fsm::DESCRIPTION => clienttranslate('${actplayer} must choose a tile from the opponent\'s reserve'),
         Fsm::OWN_DESCRIPTION => clienttranslate('${you} must choose a tile from reserve for the opponent to draw'),
         Fsm::POSSIBLE_ACTIONS => [
             'actDraft'

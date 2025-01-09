@@ -521,7 +521,9 @@ class Game extends \Table
         $playerId = $this->getActivePlayerId();
         $playerIndex = $this->getPlayerNoById($playerId) - 1;
 
-        $this->updateLastPiece($playerIndex, 0, true);
+        if ($state !== \State::RESERVE) {
+            $this->updateLastPiece($playerIndex, 0, true);
+        }
 
         $draftCount = match ($state) {
             \State::DRAFT => $this->getDraftCount(),
@@ -566,7 +568,8 @@ class Game extends \Table
             'player_name' => $this->getPlayerNameById($playerId),
             'playerIndex' => $playerIndex,
             'pieceIds' => $ids,
-            'pieceIcons' => "$playerIndex,$ids_str"
+            'pieceIcons' => "$playerIndex,$ids_str",
+            'reserve' => $state === \State::RESERVE
         ]);
 
         $this->gamestate->nextState(match ($state) {

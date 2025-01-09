@@ -1199,12 +1199,14 @@ const Paiko = {
         }
     },
 
-    async onNotificationDraft({playerIndex, pieceIds}) {
+    async onNotificationDraft({playerIndex, pieceIds, reserve}) {
         clearTag("pk-selectable");
 
-        const lastPiece = findLastMovedPiece(playerIndex);
-        if (lastPiece) {
-            lastPiece.classList.remove("last-moved");
+        if (!reserve) {
+            const lastPiece = findLastMovedPiece(playerIndex);
+            if (lastPiece) {
+                lastPiece.classList.remove("last-moved");
+            }
         }
 
         const animations = [];
