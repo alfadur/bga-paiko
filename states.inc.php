@@ -113,7 +113,8 @@ $machinestates = [
         Fsm::ARGUMENTS => 'argSaiMove',
         Fsm::POSSIBLE_ACTIONS => [
             'actMove',
-            'actSkip'
+            'actSkip',
+            'actUndo'
         ],
         Fsm::TRANSITIONS => [
             State::NEXT_TURN => State::NEXT_TURN,

@@ -727,6 +727,45 @@ class Game extends \Table
         $this->commitGlobals();
     }
 
+    public function actUndo(
+        #[IntParam(min: 0, max:13)] int $x,
+        #[IntParam(min: 0, max:13)] int $y)
+    {
+        $saiId = $this->get(\GameGlobal::SaiId) - 1;
+        $this->set(\GameGlobal::SaiId, 0);
+
+        $hand = \PieceStatus::Hand->value;
+        self::DbQuery(<<<EOF
+            UPDATE piece 
+            SET status = $hand
+            WHERE id = $saiId AND x = $x AND y = $y
+            EOF);
+
+        if (self::DbAffectedRow() === 0) {
+            throw new \BgaVisibleSystemException('Invalid undo');
+        }
+
+        $playerId = $this->getActivePlayerId();
+        $playerIndex = $this->getPlayerNoById($playerId) - 1;
+
+        $score = $this->getBasePoints($playerIndex, $this->getBase($x, $y));
+
+        if ($score !== 0) {
+            $this->postInc(\GameGlobal::Score, -($score << 8 * $playerIndex));
+        }
+
+        $this->notifyAllPlayers('Undo', clienttranslate('${player_name} undoes ${pieceIcon} deployment'), [
+            'player_name' => $this->getPlayerNameById($playerId),
+            'playerId' => $playerId,
+            'id' => $saiId,
+            'score' => $score,
+            'pieceIcon' => "$playerIndex,$saiId"
+        ]);
+
+        $this->gamestate->jumpToState(\State::ACTION);
+        $this->commitGlobals();
+    }
+
     public function actMove(
         #[IntParam] int $id,
         #[IntParam(min: 0, max:7)] int $type,

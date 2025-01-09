@@ -26,7 +26,8 @@ const Action = {
     draft: "actDraft",
     move: "actMove",
     deploy: "actDeploy",
-    skip: "actSkip"
+    skip: "actSkip",
+    undo: "actUndo"
 };
 Object.freeze(Action);
 
@@ -769,7 +770,7 @@ const Paiko = {
                             angle: intMod(getStyle(piece, {angle: null}).angle, 4),
                             canSkip: true
                         },
-                        possibleactions: [Action.move, Action.skip]
+                        possibleactions: [Action.move, Action.skip, Action.undo]
                     });
                     break;
                 }
@@ -877,6 +878,18 @@ const Paiko = {
                     this.cancelAction(stateName, args);
                     this.bgaPerformAction(Action.skip);
                 }, null, null, "red");
+
+                if (stateName === State.clientMove) {
+                    if (args && args.canSkip) {
+                        this.addActionButton("pk-undo-button", _("Undo"), () => {
+                            const space = findSelectedPiece().parentElement;
+                            this.bgaPerformAction(Action.undo, {
+                                x: space.dataset.x,
+                                y: space.dataset.y
+                            });
+                        }, null, null, 'gray');
+                    }
+                }
             }
         } else if (!this.isSpectator) {
             switch (stateName) {
@@ -1221,6 +1234,15 @@ const Paiko = {
         }
 
         await Promise.all(animations);
+    },
+
+    async onNotificationUndo({playerId, id, score}) {
+        const playerIndex = this.gamedatas.players[playerId].index;
+        const hand = findHand(playerIndex, PieceType.sai);
+        await this.animateMovePiece(findPiece(id), hand);
+        if (score !== 0) {
+            this.scoreCtrl[playerId].incValue(-score);
+        }
     },
 
     formatPiece(playerIndex, ...ids) {
