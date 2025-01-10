@@ -441,10 +441,16 @@ class Game extends \Table
 
             $this->postInc(\GameGlobal::CapturedPieces, 1 << $playerIndex * 8);
 
-            $this->notifyAllPlayers('Capture', clienttranslate('${pieceIcon} is captured'), [
+            $message = $score === 0 ?
+                clienttranslate('${pieceIcon} is captured') :
+                clienttranslate('${pieceIcon} is captured, ${player_name} loses <b>${amount} point(s)</b>');
+
+            $this->notifyAllPlayers('Capture', $message, [
+                'player_name' => $this->getPlayerNameById($playerId),
                 'playerIndex' => $playerIndex,
                 'id' => $id,
                 'score' => $score,
+                'amount' => -$score,
                 'pieceIcon' => "$playerIndex,$id"
             ]);
 
@@ -653,20 +659,36 @@ class Game extends \Table
             throw new \BgaVisibleSystemException('Invalid deploy');
         }
 
+        $toBase = $this->getBase($x, $y);
         $score = $piece !== \PieceType::Lotus ?
-            $this->getBasePoints($playerIndex, $this->getBase($x, $y)) :
+            $this->getBasePoints($playerIndex, $toBase) :
             0;
+
         if ($waterRedeploy) {
-            $score -= $this->getBasePoints($playerIndex, $this->getBase($fromX, $fromY));
+            $fromBase = $this->getBase($fromX, $fromY);
+            $score -= $this->getBasePoints($playerIndex, $fromBase);
+
+            $message = $score === 0 ?
+                clienttranslate('${player_name} redeploys ${pieceIcon}') :
+                match ([$fromBase, $toBase]) {
+                    [1 - $playerIndex, $playerIndex],
+                    [1 - $playerIndex, null] => clienttranslate('${player_name} redeploys ${pieceIcon} out of opponent\'s homeground and loses <b>${amount} point(s)</b>'),
+                    [$playerIndex, 1 - $playerIndex],
+                    [null, 1 - $playerIndex] => clienttranslate('${player_name} redeploys ${pieceIcon} in opponent\'s homeground and scores <b>${amount} point(s)</b>'),
+                    [$playerIndex, null] => clienttranslate('${player_name} redeploys ${pieceIcon} in middleground and scores <b>${amount} point(s)</b>'),
+                    default => clienttranslate('${player_name} redeploys ${pieceIcon} out of middleground and loses <b>${amount} point(s)</b>')
+                };
+        } else {
+            $message = $score === 0 ?
+                clienttranslate('${player_name} deploys ${pieceIcon}') : (
+                    $score === 1 ?
+                        clienttranslate('${player_name} deploys ${pieceIcon} in middleground and scores <b>${amount} point(s)</b>') :
+                        clienttranslate('${player_name} deploys ${pieceIcon} in opponent\'s homeground and scores <b>${amount} point(s)</b>'));
         }
 
         if ($score !== 0) {
             $this->postInc(\GameGlobal::Score, $score << 8 * $playerIndex);
         }
-
-        $message = $waterRedeploy ?
-            clienttranslate('${player_name} redeploys ${pieceIcon}') :
-            clienttranslate('${player_name} deploys ${pieceIcon}');
 
         $this->notifyAllPlayers('Move', $message, [
             'player_name' => $this->getPlayerNameById($playerId),
@@ -676,6 +698,7 @@ class Game extends \Table
             'y' => $y,
             'angle' => $angle,
             'score' => $score,
+            'amount' => abs($score),
             'isMove' => $waterRedeploy,
             'pieceIcon' => "$playerIndex,$id"
         ]);
@@ -829,15 +852,28 @@ class Game extends \Table
 
         $playerIndex = $this->getPlayerNoById($playerId) - 1;
 
+        $toBase = $this->getBase($toX, $toY);
+        $fromBase = $this->getBase($x, $y);
         $score =
-            $this->getBasePoints($playerIndex, $this->getBase($toX, $toY))
-            - $this->getBasePoints($playerIndex, $this->getBase($x, $y));
+            $this->getBasePoints($playerIndex, $toBase)
+            - $this->getBasePoints($playerIndex, $fromBase);
 
         if ($score !== 0) {
             $this->postInc(\GameGlobal::Score, $score << 8 * $playerIndex);
+
+            $message = match ([$fromBase, $toBase]) {
+                [1 - $playerIndex, $playerIndex],
+                [1 - $playerIndex, null] => clienttranslate('${player_name} shifts ${pieceIcon} out of opponent\'s homeground and loses <b>${amount} point(s)</b>'),
+                [$playerIndex, 1 - $playerIndex],
+                [null, 1 - $playerIndex] => clienttranslate('${player_name} shifts ${pieceIcon} into opponent\'s homeground and scores <b>${amount} point(s)</b>'),
+                [$playerIndex, null] => clienttranslate('${player_name} shifts ${pieceIcon} into middleground and scores <b>${amount} point(s)</b>'),
+                default => clienttranslate('${player_name} shifts ${pieceIcon} out of middleground and loses <b>${amount} point(s)</b>')
+            };
+        } else {
+            $message = clienttranslate('${player_name} shifts ${pieceIcon}');
         }
 
-        $this->notifyAllPlayers('Move', clienttranslate('${player_name} shifts ${pieceIcon}'), [
+        $this->notifyAllPlayers('Move', $message, [
             'player_name' => $this->getPlayerNameById($playerId),
             'playerId' => $playerId,
             'id' => $id,
@@ -845,6 +881,7 @@ class Game extends \Table
             'y' => $toY,
             'angle' => [$angle],
             'score' => $score,
+            'amount' => abs($score),
             'isMove' => true,
             'pieceIcon' => "$playerIndex,$id"
         ]);

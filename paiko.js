@@ -934,7 +934,6 @@ const Paiko = {
             const path = this.paths.find(path => path.space === targetSpace);
 
             if (!path.steps) {
-                const sourceSpace = selectedPiece.parentElement;
                 this.bgaPerformAction(Action.deploy, {
                     id: selectedPiece.dataset.id,
                     x: targetSpace.dataset.x,
@@ -1156,7 +1155,7 @@ const Paiko = {
                         pieceIcon: `${this.playerIndex},${piece.dataset.id}`,
                         angle: intMod(getStyle(piece, {angle: null}).angle, 4)
                     },
-                    possibleactions: [Action.move]
+                    possibleactions: [Action.move, Action.deploy]
                 });
                 piece.classList.add("pk-selected");
             }
