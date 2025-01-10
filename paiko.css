@@ -390,9 +390,12 @@
     font-weight: 500;
 }
 
+.pk-help-grid-container {
+    --fill: #6d7179;
+}
+
 .pk-help-grid {
     --grid-size: 230px;
-    --fill: #6d7179;
 
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -437,9 +440,47 @@
         radial-gradient(circle at center, #269522 0, #046b04 100%);
 }
 
+.pk-help-legend {
+    --size: 40px;
+    display: flex;
+    flex-flow: row nowrap;
+    line-height: var(--size);
+    margin: 18px 14px 14px 40px;
+    gap: 16px;
+    color: #bfced1;
+    font-size: 20px;
+}
+
+.pk-help-legend::before {
+    --size: 40px;
+    display: block;
+    content: "";
+    width: var(--size);
+    height: var(--size);
+    box-shadow: 1px 1px 2px 2px black;
+}
+
+.pk-help-legend.threat::before,
+.pk-help-legend.fire-threat::before {
+    background-image: repeating-linear-gradient(
+        45deg,
+        var(--fill),
+        var(--fill) 5px,
+        var(--hatch) 5px,
+        var(--hatch) 10px);
+}
+
+.pk-help-legend.cover::before {
+    background-image: radial-gradient(circle at center, #269522 0, #046b04 100%);
+}
+
+.pk-help-legend.threat::before { --hatch: #e7e60e; }
+.pk-help-legend.fire-threat::before { --hatch: #ff8316; }
+
 .pk-help-lines {
     flex-basis: 0;
     flex-grow: 1;
+    margin-left: 12px;
 }
 
 .pk-help-line {

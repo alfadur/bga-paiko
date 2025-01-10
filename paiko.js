@@ -215,7 +215,7 @@ function createStack(className, playerIndex, type, invert) {
     </div>`;
 }
 
-function createHelp(playerIndex, piece, name, description) {
+function createHelp(playerIndex, piece, name, description, legends) {
     const spaces = [];
     const threat = PieceThreat[piece];
     const cover = PieceCover[piece];
@@ -231,11 +231,16 @@ function createHelp(playerIndex, piece, name, description) {
         }
     }
 
+    legends = legends.map(({type, text}) => `<div class="pk-help-legend ${type}">${text}</div>`);
+
     const lines = description.map(text => `<div class="pk-help-line">${text}</div>`);
     return `<div class="pk-piece-help">
         <div class="pk-title">${name}</div>
-        <div class="pk-help-grid">${spaces.join("")}</div>
-        <div class="pk-help-lines">${lines.join("")}</div>
+        <div class="pk-help-grid-container">
+            <div class="pk-help-grid">${spaces.join("")}</div>
+            ${legends.join("")}
+        </div>        
+        <div class="pk-help-lines">${lines.join("")}</div>        
     </div>`
 }
 
@@ -698,7 +703,7 @@ const Paiko = {
                 case PieceType.fire: {
                     name = _("Fire");
                     lines.push(_("Shifts up to 2 squares"));
-                    lines.push(_("Threatens all pieces, including itself"));
+                    lines.push(_("Threatens all tiles, including itself"));
                     break;
                 }
                 case PieceType.earth: {
@@ -715,7 +720,26 @@ const Paiko = {
             }
 
             for (const index in range(2)) {
-                const html = createHelp(index, type, name, lines);
+                const legends = [];
+
+                if (PieceThreat[type].length > 0) {
+                    legends.push(type === PieceType.fire ? {
+                        type: "fire-threat",
+                        text: _("Threat to all")
+                    } : {
+                        type: "threat",
+                        text: _("Threat")
+                    });
+                }
+
+                if (PieceCover[type].length > 0) {
+                    legends.push({
+                        type: "cover",
+                        text: _("Cover")
+                    });
+                }
+
+                const html = createHelp(index, type, name, lines, legends);
                 this.addTooltipHtmlToClass(`pk-piece-type-${index}-${type}`, html);
             }
         }
