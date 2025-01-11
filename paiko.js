@@ -153,8 +153,8 @@ function getCenteredRect(element) {
 }
 
 function createPiece(id, playerIndex, type, angle = 0) {
-    const spriteX = type % 4;
-    const spriteY = type >> 2;
+    const spriteX = type;
+    const spriteY = playerIndex;
     const idString = id === null ? "" : `id="pk-piece-${id}"`;
     const data = id === null ? "" : `data-id="${id}"`;
     const typeClass = id === null? "" : `pk-piece-type-${playerIndex}-${type}`;
@@ -205,7 +205,7 @@ function createBoard(playerIndex) {
             <div id="pk-board-shadow"></div>
         </div>        
         <div id="pk-board-background"></div>
-        <div id="pk-board-spaces">${spaces.join("")}</div>        
+        <div id="pk-board-spaces">${spaces.join("")}</div>  
     </div>`;
 }
 
@@ -906,7 +906,7 @@ const Paiko = {
                 if (stateName === State.clientMove) {
                     if (args && args.canSkip) {
                         this.addActionButton("pk-undo-button", _("Undo"), () => {
-                            const space = findSelectedPiece().parentElement;
+                            const space = args.sourceSpace;
                             this.bgaPerformAction(Action.undo, {
                                 x: space.dataset.x,
                                 y: space.dataset.y
