@@ -760,7 +760,7 @@ class Game extends \Table
         $hand = \PieceStatus::Hand->value;
         self::DbQuery(<<<EOF
             UPDATE piece 
-            SET status = $hand
+            SET status = $hand, x = NULL, y = NULL
             WHERE id = $saiId AND x = $x AND y = $y
             EOF);
 

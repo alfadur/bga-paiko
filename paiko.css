@@ -165,7 +165,7 @@
 
 #pk-container[data-player="1"] #pk-board-spaces {
     grid-template-columns: 0.24fr repeat(7, 1fr) 0.16fr repeat(7, 1fr) 0.18fr;
-    grid-template-rows: 0.17fr repeat(7, 1fr) 0.2fr repeat(7, 1fr) 0.23fr;
+    grid-template-rows: 0.23fr repeat(7, 1fr) 0.2fr repeat(7, 1fr) 0.17fr;
 }
 
 .pk-board-space, .pk-board-hole {
