@@ -259,8 +259,8 @@ class Game extends \Table
 
     private function capture(int $playerIndex, $pieces): bool
     {
-        $captures = 0;
-        $fireCaptures = 0;
+        $captures = -1;
+        $fireCaptures = -1;
 
         foreach ($pieces as $piece) {
             $x = (int)$piece['x'];
@@ -291,7 +291,7 @@ class Game extends \Table
             $this->set(\GameGlobal::FireCaptures, $fireCaptures);
         }
 
-        return $captures || $fireCaptures;
+        return $captures !== -1 || $fireCaptures !== -1;
     }
 
     private function updateLastPiece(int $playerIndex, int $id, bool $reset)
@@ -394,12 +394,12 @@ class Game extends \Table
         $captures = $this->get(\GameGlobal::Captures);
         $isFire = false;
 
-        if ($captures === 0) {
+        if ($captures === -1) {
             $captures = $this->get(\GameGlobal::FireCaptures);
             $isFire = true;
         }
 
-        if ($captures === 0) {
+        if ($captures === -1) {
             $this->gamestate->nextState(\State::NEXT_TURN);
         } else {
             $id = $captures & 0xFF;
@@ -418,7 +418,7 @@ class Game extends \Table
                 WHERE id = $id
                 EOF);
 
-            $this->set($isFire ? \GameGlobal::FireCaptures : \GameGlobal::Captures, $captures >> 8);
+            $this->set($isFire ? \GameGlobal::FireCaptures : \GameGlobal::Captures, ~(~$captures >> 8));
 
             if (count(\PieceType::COVER[$type]) > 0) {
                 $board = \PieceStatus::Board->value;
@@ -514,9 +514,19 @@ class Game extends \Table
 
     public function argCapture(): array
     {
+        function unpackIds(int $bits): array
+        {
+            $result = [];
+            while ($bits !== -1) {
+                $result[] = $bits & 0xFF;
+                $bits = ~(~$bits >> 8);
+            }
+            return $result;
+        };
+
         return [
-            'captures' => $this->get(\GameGlobal::Captures),
-            'fireCaptures' => $this->get(\GameGlobal::FireCaptures)
+            'captures' => unpackIds($this->get(\GameGlobal::Captures)),
+            'fireCaptures' => unpackIds($this->get(\GameGlobal::FireCaptures))
         ];
     }
 
